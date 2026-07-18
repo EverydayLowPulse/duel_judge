@@ -124,7 +124,9 @@
 
 ## Evidence Gate（機械チェック）
 
-`answer` を出す前に全部通す。1つでも落ちたら `withhold` か再検索。
+`answer` を出す前に通す。**ハード失敗だけ withhold**。ソフト失敗はラベルを直して回答する。
+
+### ハード（保留）
 
 1. `evidence` が1件以上ある
 2. 各 `url` が `https://dm.takaratomy.co.jp/` で始まる
@@ -133,11 +135,16 @@
    - ただし照合前に双方を正規化する: 空白・改行の除去、全角/半角の統一など  
    - 正規化後の部分文字列一致で判定（PDF抽出の改行ズレによる偽陰性を防ぐ）
 4. `evidence[].type` が `qa` / `rule` / `card` のみ
-5. `type: rule` には `rule_ref` がある。可能ならそのルール番号のチャンクを実際に検索ヒットさせていること
-6. `confidence` と根拠の整合:
-   - `high` → `type: qa` が1件以上
-   - `medium` → `type: qa` が1件以上（類似扱い）かつ直接該当でない旨が `confidence_note` にある
-   - `low` → `type: qa` が0件、`type: rule` が1件以上、`reasoning` あり
+5. `type: rule` には `rule_ref` がある
+6. `conclusion` が空でない
+
+### ソフト（自動修正して回答）
+
+`confidence` と根拠種別の食い違いは保留しない。
+
+- `high` / `medium` なのに `type: qa` がない → `low`（ruleあり）または `medium`（cardのみ）へ下げ、`confidence_note` に注記
+- `low` なのに `type: qa` がある → `medium` へ上げる
+- `medium` / `low` で `reasoning` が空 → 短い注記を自動付与
 
 ## ユーザー向け表示（整形例）
 

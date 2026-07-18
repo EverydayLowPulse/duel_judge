@@ -4,3 +4,16 @@ temp/
 # 人間向けの私的メモ
 memo/
 *forme*/
+
+# ランタイムデータ（カードキャッシュ・ミラー）
+data/
+
+# Next.js / Node
+web/node_modules/
+web/.next/
+web/out/
+web/.env*.local
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/*.tsbuildinfo
