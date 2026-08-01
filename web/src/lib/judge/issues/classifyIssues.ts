@@ -38,6 +38,7 @@ export function classifyIssues(input: {
   const pending = matchPendingAbilityHints({
     question: input.question,
     entities: input.entities,
+    cardTexts: input.cardTexts,
   });
   if (pending) {
     const concept = getConceptById("pending_abilities");

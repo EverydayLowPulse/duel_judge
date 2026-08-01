@@ -109,6 +109,12 @@ export const KEYWORD_RULE_DICTIONARY: KeywordRuleMapping[] = [
     aliases: ["誘発型能力"],
     ruleRefs: ["110.3b", "603.2", "603.2e", "603.2f"],
   },
+  {
+    key: "封印",
+    label: "封印",
+    aliases: ["封印", "封印する"],
+    ruleRefs: ["116.2", "116.2a", "110.5a"],
+  },
 ];
 export type MatchedKeyword = {
   label: string;

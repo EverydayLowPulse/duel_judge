@@ -5,6 +5,7 @@
 | ファイル | 内容 |
 |----------|------|
 | [project.md](./project.md) | 全体方針・処理フロー・データ方針・フェーズ |
+| [inference_approaches.md](./inference_approaches.md) | 裁定推論の現状（論点駆動）と将来のステップ駆動実験メモ |
 | [answer_format.md](./answer_format.md) | 回答JSONスキーマ・Evidence Gate |
 | [evaluation.md](./evaluation.md) | 評価セット・採点軸・合格ライン |
 | [eval/](./eval/) | 個別評価ケース（例: 多色マナ支払い） |
