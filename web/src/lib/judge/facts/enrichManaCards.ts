@@ -7,14 +7,19 @@ import type { OfficialCard } from "../../official/types";
 
 /**
  * マナ列挙に含まれる未解決カード名を公式DBで補完してから facts を組み立てる。
+ *
+ * `resolveExtraCards: false`（送信前確定モード）では公式検索をしない。
+ * 盤面に関わるカードはユーザーが選び切っているため、文章から推定して足さない。
  */
 export async function buildEnrichedScenarioFacts(input: {
   question: string;
   plan: SearchPlan;
   scenarioCards: ScenarioCard[];
   primaryCard?: OfficialCard;
+  resolveExtraCards?: boolean;
 }): Promise<{ facts: ScenarioFacts; extraCards: ScenarioCard[] }> {
-  const tokens = extractManaTokens(input.question);
+  const tokens =
+    input.resolveExtraCards === false ? [] : extractManaTokens(input.question);
   const extraCards: ScenarioCard[] = [];
   const known = new Set(
     input.scenarioCards.flatMap((c) => [
@@ -50,7 +55,7 @@ export async function buildEnrichedScenarioFacts(input: {
 function extractManaTokens(question: string): string[] {
   const normalized = question.normalize("NFKC");
   const markers = ["マナに", "マナゾーンに", "マナゾーン"];
-  let span = normalized;
+  let span: string | null = null;
   for (const marker of markers) {
     const idx = normalized.indexOf(marker);
     if (idx >= 0) {
@@ -58,6 +63,9 @@ function extractManaTokens(question: string): string[] {
       break;
     }
   }
+  // マナのマーカーが無ければマナ列挙は無い。質問全文を候補にすると
+  // 文の断片をカード名として公式検索してしまう。
+  if (span === null) return [];
   // 「の3枚」「が存在する」などで切る
   span = span.split(/の\s*\d+\s*枚|が存在|とき|時、|。/)[0] ?? span;
 

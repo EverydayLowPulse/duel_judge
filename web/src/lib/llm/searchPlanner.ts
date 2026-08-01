@@ -88,10 +88,24 @@ const SYSTEM = `あなたはデュエル・マスターズ公式文書の検索�
 export async function planSearchWithGemini(input: {
   question: string;
   card?: OfficialCard;
+  /** 送信前にユーザーが確定した全カード。指定時は能力テキストを全件渡す */
+  cards?: OfficialCard[];
 }): Promise<SearchPlan> {
-  const cardContext = input.card
-    ? `確定カード: ${input.card.officialName}\n能力テキスト:\n${input.card.abilityText}`
-    : "確定カード: なし";
+  const contextCards =
+    input.cards && input.cards.length > 0
+      ? input.cards
+      : input.card
+        ? [input.card]
+        : [];
+  const cardContext =
+    contextCards.length > 0
+      ? contextCards
+          .map(
+            (card) =>
+              `確定カード: ${card.officialName}\n能力テキスト:\n${card.abilityText}`,
+          )
+          .join("\n\n")
+      : "確定カード: なし";
 
   try {
     const parsed = await generateJson({
@@ -102,16 +116,22 @@ export async function planSearchWithGemini(input: {
       temperature: 0.1,
       purpose: "plan",
     });
-    return sanitizePlan(parsed, input);
+    return sanitizePlan(parsed, {
+      question: input.question,
+      cards: contextCards,
+    });
   } catch {
     // 検索プランナーの混雑・一時障害で裁定全体を止めない。
-    return deterministicFallback(input);
+    return deterministicFallback({
+      question: input.question,
+      cards: contextCards,
+    });
   }
 }
 
 function sanitizePlan(
   raw: Partial<SearchPlan>,
-  input: { question: string; card?: OfficialCard },
+  input: { question: string; cards: OfficialCard[] },
 ): SearchPlan {
   const keywords = extractSearchKeywords(input.question);
   const rawMentions = cleanCardMentions(raw.cardMentions);
@@ -122,7 +142,7 @@ function sanitizePlan(
     .filter((m) => !isKnownKeywordAbilityName(m.mention))
     .slice(0, 6);
   const entities = unique([
-    ...(input.card ? [input.card.officialName] : []),
+    ...input.cards.map((card) => card.officialName),
     ...cleanList(raw.entities),
     ...keywordMentions,
     ...keywords.slice(0, 3),
@@ -135,7 +155,7 @@ function sanitizePlan(
   const qaQueries = unique(
     [
       ...cleanList(raw.qaQueries),
-      ...(input.card ? [input.card.officialName] : []),
+      ...input.cards.map((card) => card.officialName),
       ...keywordMentions,
       ...keywords.slice(0, 2),
     ].map(normalizeQaQuery),
@@ -159,23 +179,19 @@ function sanitizePlan(
 
 function deterministicFallback(input: {
   question: string;
-  card?: OfficialCard;
+  cards: OfficialCard[];
 }): SearchPlan {
   const keywords = extractSearchKeywords(input.question);
   const entities = unique([
-    ...(input.card ? [input.card.officialName] : []),
+    ...input.cards.map((card) => card.officialName),
     ...keywords,
   ]).slice(0, 8);
   return {
-    cardMentions: input.card
-      ? [
-          {
-            mention: input.card.officialName,
-            role: "other",
-            relevantAbility: "",
-          },
-        ]
-      : [],
+    cardMentions: input.cards.map((card) => ({
+      mention: card.officialName,
+      role: "other" as const,
+      relevantAbility: "",
+    })),
     entities,
     events: [],
     concepts: [],

@@ -18,6 +18,7 @@ import {
   endLlmUsageCapture,
   summarizeLlmUsage,
 } from "../llm/usage";
+import { fetchCardDetail } from "../official/card";
 import type { OfficialCard } from "../official/types";
 import {
   resolveCardById,
@@ -33,9 +34,14 @@ import { formatLeaveReplacementHints } from "./facts/leaveReplacement";
 import { formatWrittenAbilityHints } from "./facts/writtenAbilities";
 import { classifyIssues } from "./issues/classifyIssues";
 import { retrieveOfficialSources } from "./retrieveSources";
-import { resolveScenarioCards } from "./scenarioCards";
+import {
+  buildConfirmedScenarioCards,
+  resolveScenarioCards,
+  type ScenarioCard,
+} from "./scenarioCards";
 import { progressEvent } from "./progress";
 import type {
+  ConfirmedCardInput,
   JudgeRequest,
   JudgeResponse,
   ProcessTraceEntry,
@@ -156,123 +162,149 @@ async function runJudgePipeline(
   let cardQuery = req.cardQuery?.trim();
   let resolve: ResolveCardNameResult | null = null;
 
-  // カード解決（公式0件時は内部で dmwiki 補助→公式再検索）
-  if (req.cardId && cardQuery) {
-    report("resolve_card", "指定カードを取得中…");
-    resolve = await resolveCardById(cardQuery, req.cardId);
-  } else if (cardQuery) {
-    report("resolve_card");
-    resolve = await resolveCardName(cardQuery);
-  }
+  // 送信前にユーザーが確定していれば名前解決は一切しない。
+  // 読み仮名・ひらがな表記は正式名と一致せず、公式への空打ちを積み上げるだけになる。
+  let confirmed: ConfirmedCard[] | null = null;
+  if (req.confirmedCards) {
+    report("resolve_card", "確定したカードを読み込み中…");
+    confirmed = await loadConfirmedCards(req.confirmedCards);
+  } else {
+    // カード解決（公式0件時は内部で dmwiki 補助→公式再検索）
+    if (req.cardId && cardQuery) {
+      report("resolve_card", "指定カードを取得中…");
+      resolve = await resolveCardById(cardQuery, req.cardId);
+    } else if (cardQuery) {
+      report("resolve_card");
+      resolve = await resolveCardName(cardQuery);
+    }
 
-  if (resolve?.kind === "clarify") {
-    return { kind: "clarify", resolve };
-  }
-  if (resolve?.kind === "not_found") {
-    return { kind: "not_found", resolve };
-  }
-
-  const card = resolve?.kind === "resolved" ? resolve.card : undefined;
-  report("plan");
-  const plan = await planSearchWithGemini({ question, card });
-  report("resolve_scenario");
-  const scenarioResolved = await resolveScenarioCards({
-    plan,
-    primaryCard: card,
-  });
-  const scenarioCards = scenarioResolved.cards;
-
-  // 解決できなかった言及は推測で進めず聞き返す
-  const askWithCandidates = scenarioResolved.askAbout.filter(
-    (a) => a.candidates.length > 0,
-  );
-  if (askWithCandidates.length > 0) {
-    const first = askWithCandidates[0]!;
-    return {
-      kind: "clarify",
-      resolve: {
-        kind: "clarify",
-        query: first.mention,
-        source: "official_search",
-        note: first.note,
-        questions: askWithCandidates.map((a) => ({
-          about: a.mention,
-          candidates: a.candidates.map((c) => ({
-            official_name: c.officialName,
-            card_id: c.cardId,
-            detail_url: c.detailUrl,
-            cost: c.cost,
-            civilizations: c.civilizations,
-            card_type: c.cardType,
-          })),
-        })),
-        candidates: first.candidates,
-      },
-    };
-  }
-  const askUnresolved = scenarioResolved.askAbout.filter(
-    (a) => a.candidates.length === 0,
-  );
-  if (askUnresolved.length > 0) {
-    return {
-      kind: "not_found",
-      resolve: {
-        kind: "not_found",
-        query: askUnresolved.map((a) => a.mention).join(" / "),
-        note: askUnresolved.map((a) => a.note).join(" "),
-      },
-    };
-  }
-
-  // カード語句で指定したカードに、略称メンションを安全に紐づける
-  // （ドッコイ等の別カードには付けない。名前の包含／部分列、または略称辞書で判定）
-  if (card) {
-    for (const mention of plan.cardMentions) {
-      if (mention.role === "other") continue;
-      const alreadyResolved = scenarioCards.some(
-        (resolved) =>
-          normalizeCardName(resolved.mention) ===
-            normalizeCardName(mention.mention) ||
-          normalizeCardName(resolved.card.officialName) ===
-            normalizeCardName(mention.mention),
-      );
-      if (alreadyResolved) continue;
-      // 読み仮名略称は正式名の部分列にならないことがある（ダーバンデ ↛ Drache）
-      // その場合は resolveScenarioCards 側の略称辞書解決に任せる
-      if (!looksLikeCardMention(mention.mention, card.officialName)) continue;
-      scenarioCards.push({
-        mention: mention.mention,
-        role: mention.role,
-        relevantAbility: mention.relevantAbility,
-        card,
-      });
+    if (resolve?.kind === "clarify") {
+      return { kind: "clarify", resolve };
+    }
+    if (resolve?.kind === "not_found") {
+      return { kind: "not_found", resolve };
     }
   }
 
-  const unresolvedMentions = plan.cardMentions.filter(
-    (mention) =>
-      mention.role !== "other" &&
-      !isKnownKeywordAbilityName(mention.mention) &&
-      !scenarioCards.some(
-        (resolved) =>
-          normalizeCardName(resolved.mention) ===
-            normalizeCardName(mention.mention) ||
-          normalizeCardName(resolved.card.officialName) ===
-            normalizeCardName(mention.mention) ||
-          looksLikeCardMention(mention.mention, resolved.card.officialName),
-      ),
-  );
-  if (unresolvedMentions.length > 0) {
-    return {
-      kind: "not_found",
-      resolve: {
+  const card =
+    confirmed?.[0]?.card ??
+    (resolve?.kind === "resolved" ? resolve.card : undefined);
+  if (confirmed && !cardQuery) {
+    cardQuery =
+      confirmed
+        .map((item) => item.mention ?? item.card.officialName)
+        .join(" / ") || undefined;
+  }
+  report("plan");
+  const plan = await planSearchWithGemini({
+    question,
+    card,
+    cards: confirmed?.map((item) => item.card),
+  });
+
+  let scenarioCards: ScenarioCard[];
+  if (confirmed) {
+    scenarioCards = buildConfirmedScenarioCards({ plan, cards: confirmed });
+  } else {
+    report("resolve_scenario");
+    const scenarioResolved = await resolveScenarioCards({
+      plan,
+      primaryCard: card,
+    });
+    scenarioCards = scenarioResolved.cards;
+
+    // 解決できなかった言及は推測で進めず聞き返す
+    const askWithCandidates = scenarioResolved.askAbout.filter(
+      (a) => a.candidates.length > 0,
+    );
+    if (askWithCandidates.length > 0) {
+      const first = askWithCandidates[0]!;
+      return {
+        kind: "clarify",
+        resolve: {
+          kind: "clarify",
+          query: first.mention,
+          source: "official_search",
+          note: first.note,
+          questions: askWithCandidates.map((a) => ({
+            about: a.mention,
+            candidates: a.candidates.map((c) => ({
+              official_name: c.officialName,
+              card_id: c.cardId,
+              detail_url: c.detailUrl,
+              cost: c.cost,
+              civilizations: c.civilizations,
+              card_type: c.cardType,
+            })),
+          })),
+          candidates: first.candidates,
+        },
+      };
+    }
+    const askUnresolved = scenarioResolved.askAbout.filter(
+      (a) => a.candidates.length === 0,
+    );
+    if (askUnresolved.length > 0) {
+      return {
         kind: "not_found",
-        query: unresolvedMentions.map((item) => item.mention).join(" / "),
-        note: `次のカードを公式DBで確定できませんでした: ${unresolvedMentions
-          .map((item) => item.mention)
-          .join("、")}。正式名を「カード語句」に入れて、同じ質問をもう一度送ってください。`,
-      },
-    };
+        resolve: {
+          kind: "not_found",
+          query: askUnresolved.map((a) => a.mention).join(" / "),
+          note: askUnresolved.map((a) => a.note).join(" "),
+        },
+      };
+    }
+
+    // カード語句で指定したカードに、略称メンションを安全に紐づける
+    // （ドッコイ等の別カードには付けない。名前の包含／部分列、または略称辞書で判定）
+    if (card) {
+      for (const mention of plan.cardMentions) {
+        if (mention.role === "other") continue;
+        const alreadyResolved = scenarioCards.some(
+          (resolved) =>
+            normalizeCardName(resolved.mention) ===
+              normalizeCardName(mention.mention) ||
+            normalizeCardName(resolved.card.officialName) ===
+              normalizeCardName(mention.mention),
+        );
+        if (alreadyResolved) continue;
+        // 読み仮名略称は正式名の部分列にならないことがある（ダーバンデ ↛ Drache）
+        // その場合は resolveScenarioCards 側の略称辞書解決に任せる
+        if (!looksLikeCardMention(mention.mention, card.officialName)) continue;
+        scenarioCards.push({
+          mention: mention.mention,
+          role: mention.role,
+          relevantAbility: mention.relevantAbility,
+          card,
+        });
+      }
+    }
+
+    const unresolvedMentions = plan.cardMentions.filter(
+      (mention) =>
+        mention.role !== "other" &&
+        !isKnownKeywordAbilityName(mention.mention) &&
+        !scenarioCards.some(
+          (resolved) =>
+            normalizeCardName(resolved.mention) ===
+              normalizeCardName(mention.mention) ||
+            normalizeCardName(resolved.card.officialName) ===
+              normalizeCardName(mention.mention) ||
+            looksLikeCardMention(mention.mention, resolved.card.officialName),
+        ),
+    );
+    if (unresolvedMentions.length > 0) {
+      return {
+        kind: "not_found",
+        resolve: {
+          kind: "not_found",
+          query: unresolvedMentions.map((item) => item.mention).join(" / "),
+          note: `次のカードを公式DBで確定できませんでした: ${unresolvedMentions
+            .map((item) => item.mention)
+            .join("、")}。正式名を「カード語句」に入れて、同じ質問をもう一度送ってください。`,
+        },
+      };
+    }
   }
   report("build_facts");
   const { facts, extraCards } = await buildEnrichedScenarioFacts({
@@ -280,6 +312,7 @@ async function runJudgePipeline(
     plan,
     scenarioCards,
     primaryCard: card,
+    resolveExtraCards: !confirmed,
   });
   if (extraCards.length > 0) {
     scenarioCards.push(...extraCards);
@@ -612,6 +645,37 @@ async function runJudgePipeline(
           : undefined,
     },
   };
+}
+
+type ConfirmedCard = { card: OfficialCard; mention?: string };
+
+/**
+ * 送信前に確定したカードを cardId から読む（詳細はキャッシュ優先）。
+ *
+ * ユーザーが検索に使った表記は略称辞書へ 1対N で追記する。手書きシードを増やさずに
+ * 「この表記はこのカード」を確認済み事実として蓄積し、次回の名前解決を通す。
+ */
+async function loadConfirmedCards(
+  items: ConfirmedCardInput[],
+): Promise<ConfirmedCard[]> {
+  const out: ConfirmedCard[] = [];
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    if (seen.has(item.cardId)) continue;
+    seen.add(item.cardId);
+
+    if (item.mention) {
+      const resolved = await resolveCardById(item.mention, item.cardId);
+      if (resolved.kind === "resolved") {
+        out.push({ card: resolved.card, mention: item.mention });
+        continue;
+      }
+    }
+    out.push({ card: await fetchCardDetail(item.cardId) });
+  }
+
+  return out;
 }
 
 function cardEvidenceText(card: OfficialCard): string {

@@ -46,7 +46,9 @@ npx vercel --prod
   - 公式0件時は dmwiki 検索で正式名候補 → 公式DB再突合（`CARD_RESOLVE_WEB=auto|on|off`）。論拠には使わない
   - 任意: `DEEPSEEK_API_KEY` があれば検索語整形のみ（Gemini grounding は使わない）
 - Q&A検索: `GET /api/qa?q=レッドゾーン&details=2`
-- 裁定: `POST /api/judge` `{ question, cardQuery?, cardId?, stream? }`
+- 裁定: `POST /api/judge` `{ question, confirmedCards?, cardQuery?, cardId?, stream? }`
+  - `confirmedCards`: `[{ cardId, mention? }]`。送信前確定モード（`[]` は「カードなし」の明示）。指定時はカード名解決を行わない。`mention` は略称辞書へ学習させる
+  - `cardQuery` / `cardId` は後方互換（スモーク・スクリプト用の推定モード）
   - 既定: JSON 一発（スモーク・スクリプト向け）
   - `stream: true` または `Accept: text/event-stream`: SSE（`progress` → `result`）。進捗は段階イベント（回答トークンではない）。`progress.kind` は `status` / `monologue`（出典検証で弾れたあとの見直し独り言）。UI回答は「結論（太字）→推論→根拠一覧」を1枠で表示
   - SSE は約8秒ごとに keepalive（コメント行）。携帯回線の無通信切断を抑止。Vercel Hobby は関数上限約60秒
@@ -72,6 +74,7 @@ npx vercel --prod
 ```bash
 cd web
 npx tsx scripts/test-mana-payment-validator.ts
+npx tsx scripts/smoke-confirmed-cards.ts
 npx tsx scripts/smoke-mana-payment.ts
 npx tsx scripts/smoke-daishugo-mana.ts
 npx tsx scripts/smoke-card-resolve-bande.ts

@@ -168,6 +168,39 @@ export async function resolveScenarioCards(input: {
   return { cards: resolved, askAbout };
 }
 
+/**
+ * 送信前にユーザーが確定したカードから、公式検索を一切せずにシナリオカードを組む。
+ *
+ * mention はユーザーが検索に使った表記を優先する。読み仮名やひらがな表記は
+ * 正式名と文字列一致しないため、ここで名前照合を要求してはいけない
+ * （確定済みという事実がユーザー由来の根拠になる）。
+ */
+export function buildConfirmedScenarioCards(input: {
+  plan: SearchPlan;
+  cards: Array<{ card: OfficialCard; mention?: string }>;
+}): ScenarioCard[] {
+  const out: ScenarioCard[] = [];
+
+  for (const { card, mention } of input.cards) {
+    if (out.some((r) => r.card.cardId === card.cardId)) continue;
+
+    const planMention = input.plan.cardMentions.find(
+      (m) =>
+        (mention && normalize(m.mention) === normalize(mention)) ||
+        looksLikeCardMention(m.mention, card.officialName),
+    );
+
+    out.push({
+      mention: mention || planMention?.mention || card.officialName,
+      role: planMention?.role ?? "other",
+      relevantAbility: planMention?.relevantAbility ?? "",
+      card,
+    });
+  }
+
+  return out;
+}
+
 /** 同一カードでも別表記の mention は残す（unresolvedMentions 判定用） */
 function addResolvedMention(
   resolved: ScenarioCard[],

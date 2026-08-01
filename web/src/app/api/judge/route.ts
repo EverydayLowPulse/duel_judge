@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runJudge } from "@/lib/judge/runJudge";
 import type { JudgeProgressEvent } from "@/lib/judge/progress";
-import type { JudgeRequest, JudgeResponse } from "@/lib/judge/types";
+import type {
+  ConfirmedCardInput,
+  JudgeRequest,
+  JudgeResponse,
+} from "@/lib/judge/types";
 import { formatUserFacingLlmError } from "@/lib/llm/generateJson";
 import {
   resolveLlmOverride,
@@ -18,8 +22,10 @@ const HEARTBEAT_MS = 8_000;
 
 /**
  * POST /api/judge
- * body: { question, cardQuery?, cardId?, model?, provider?, stream? }
+ * body: { question, confirmedCards?, cardQuery?, cardId?, model?, provider?, stream? }
  *
+ * confirmedCards: 送信前にユーザーが確定したカード（`[]` は「カードなし」の明示）。
+ *   指定時はカード名解決を行わない。cardQuery / cardId は後方互換。
  * model: カタログID（推奨）。provider は後方互換。
  *
  * stream: true または Accept: text/event-stream のとき SSE
@@ -33,6 +39,7 @@ export async function POST(req: NextRequest) {
     question?: string;
     cardQuery?: string;
     cardId?: string;
+    confirmedCards?: unknown;
     model?: string;
     provider?: string;
     stream?: boolean;
@@ -67,6 +74,7 @@ export async function POST(req: NextRequest) {
     question,
     cardQuery: body.cardQuery?.trim() || undefined,
     cardId: body.cardId?.trim() || undefined,
+    confirmedCards: parseConfirmedCards(body.confirmedCards),
     model: resolved.catalog?.id,
     provider: resolved.override?.provider,
   };
@@ -154,6 +162,24 @@ export async function POST(req: NextRequest) {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+/** 空配列（カードなしの明示）と未指定（後方互換の推定モード）を区別する */
+function parseConfirmedCards(raw: unknown): ConfirmedCardInput[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ConfirmedCardInput[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const { cardId, mention } = item as { cardId?: unknown; mention?: unknown };
+    const id = typeof cardId === "string" ? cardId.trim() : "";
+    if (!id) continue;
+    out.push({
+      cardId: id,
+      mention:
+        typeof mention === "string" && mention.trim() ? mention.trim() : undefined,
+    });
+  }
+  return out;
 }
 
 function formatJudgeError(e: unknown): string {

@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { extractSearchKeywords } from "@/lib/judge/extractKeywords";
 import { fetchJudge } from "@/lib/judge/fetchJudge";
 import type { JudgeProgressEvent } from "@/lib/judge/progress";
 import type { JudgeResponse } from "@/lib/judge/types";
 import { DEFAULT_MODEL_ID } from "@/lib/llm/modelCatalog";
-import type { OfficialCard } from "@/lib/official/types";
-import type {
-  ClarifyCandidate,
-  ResolveCardNameResult,
-} from "@/lib/resolve/types";
+import { CardPickerDialog, type CardPick } from "./CardPickerDialog";
 import { ModelPicker, readStoredModelId } from "./ModelPicker";
 
 type ThinkingStep = {
@@ -34,45 +31,21 @@ type ChatItem =
       steps: ThinkingStep[];
     };
 
-type CardSuggestion =
-  | { kind: "resolved"; card: OfficialCard }
-  | { kind: "clarify"; candidates: OfficialCard[] };
-
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function formatCardMeta(card: {
-  civilizations?: string[] | null;
-  cost?: string | null;
-  cardType?: string | null;
-  card_type?: string | null;
-}): string {
-  const civs = card.civilizations?.join("/") || "文明不明";
-  const cost = card.cost ? `コスト${card.cost}` : "コスト不明";
-  const type = card.cardType ?? card.card_type ?? "種類不明";
-  return `${civs} · ${cost} · ${type}`;
 }
 
 /** 本番向けの裁定チャット（/）。ChatGPT風の1カラム会話UI。 */
 export function JudgeChat() {
   const [question, setQuestion] = useState("");
-  const [cardQuery, setCardQuery] = useState("");
-  const [showCardField, setShowCardField] = useState(false);
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ChatItem[]>([]);
-  const [suggest, setSuggest] = useState<CardSuggestion | null>(null);
-  const [suggestLoading, setSuggestLoading] = useState(false);
-  const [pending, setPending] = useState<{
-    question: string;
-    cardQuery?: string;
-  } | null>(null);
-  const cardInputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const cardFieldId = useId();
   const thinkingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -85,44 +58,6 @@ export function JudgeChat() {
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [items, loading]);
-
-  // カード語句のサジェスト（debounce）
-  useEffect(() => {
-    const q = cardQuery.trim();
-    if (q.length < 2) {
-      setSuggest(null);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setSuggestLoading(true);
-      try {
-        const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
-        const data = (await res.json()) as ResolveCardNameResult & {
-          error?: string;
-        };
-        if (cancelled || !res.ok) return;
-        if (data.kind === "resolved") {
-          setSuggest({ kind: "resolved", card: data.card });
-        } else if (data.kind === "clarify") {
-          setSuggest({
-            kind: "clarify",
-            candidates: data.candidates.slice(0, 5),
-          });
-        } else {
-          setSuggest(null);
-        }
-      } catch {
-        if (!cancelled) setSuggest(null);
-      } finally {
-        if (!cancelled) setSuggestLoading(false);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [cardQuery]);
 
   function appendThinkingStep(step: ThinkingStep) {
     const id = thinkingIdRef.current;
@@ -146,8 +81,7 @@ export function JudgeChat() {
 
   async function runJudge(body: {
     question: string;
-    cardQuery?: string;
-    cardId?: string;
+    confirmedCards: CardPick[];
     model?: string;
   }) {
     setLoading(true);
@@ -170,7 +104,14 @@ export function JudgeChat() {
 
     try {
       const result = await fetchJudge(
-        { ...body, model: body.model ?? modelId },
+        {
+          question: body.question,
+          confirmedCards: body.confirmedCards.map((pick) => ({
+            cardId: pick.cardId,
+            mention: pick.mention,
+          })),
+          model: body.model ?? modelId,
+        },
         {
         onProgress: (event: JudgeProgressEvent) => {
           appendThinkingStep({
@@ -209,22 +150,13 @@ export function JudgeChat() {
         ];
       });
 
+      // やり直せるよう、確定できなかったときは質問文を入力欄に戻す
       if (
         result.kind === "clarify" ||
         result.kind === "not_found" ||
         result.kind === "withhold"
       ) {
-        setPending({
-          question: body.question,
-          cardQuery: body.cardQuery,
-        });
         setQuestion(body.question);
-        if (body.cardQuery) {
-          setCardQuery(body.cardQuery);
-          setShowCardField(true);
-        }
-      } else {
-        setPending(null);
       }
     } catch (err) {
       setItems((prev) => prev.filter((i) => i.id !== thinkingId));
@@ -235,72 +167,42 @@ export function JudgeChat() {
     }
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  /** 送信ボタンの代替。ここでは送らず、カード確定ステップへ進む */
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!question.trim() || loading) return;
+    openPicker();
+  }
+
+  function openPicker(initialQuery?: string) {
+    setPickerQuery(initialQuery ?? guessCardQuery(question));
+    setPickerOpen(true);
+  }
+
+  async function confirmCards(picks: CardPick[]) {
     const q = question.trim();
     if (!q || loading) return;
-    const cq = cardQuery.trim() || undefined;
+    setPickerOpen(false);
+
+    const cardLine =
+      picks.length > 0
+        ? `（カード: ${picks.map((p) => p.officialName).join(" / ")}）`
+        : "（特定のカードなし）";
     setItems((prev) => [
       ...prev,
-      {
-        id: newId(),
-        role: "user",
-        text: cq ? `${q}\n（カード: ${cq}）` : q,
-      },
+      { id: newId(), role: "user", text: `${q}\n${cardLine}` },
     ]);
     setQuestion("");
-    setSuggest(null);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-    await runJudge({ question: q, cardQuery: cq });
-  }
-
-  async function selectCandidate(cardId: string, cardName: string) {
-    if (!pending || loading) return;
-    setItems((prev) => [
-      ...prev,
-      {
-        id: newId(),
-        role: "user",
-        text: `カードを確定: ${cardName}`,
-      },
-    ]);
-    setCardQuery(cardName);
-    setSuggest(null);
-    await runJudge({
-      question: pending.question,
-      cardQuery: pending.cardQuery ?? cardName,
-      cardId,
-    });
-  }
-
-  function pickSuggestion(name: string) {
-    setCardQuery(name);
-    setSuggest(null);
-    cardInputRef.current?.focus();
-  }
-
-  function focusCardField() {
-    setShowCardField(true);
-    requestAnimationFrame(() => {
-      cardInputRef.current?.focus();
-      cardInputRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    });
-  }
-
-  async function trySearchChip(term: string) {
-    setCardQuery(term);
-    focusCardField();
+    await runJudge({ question: q, confirmedCards: picks });
   }
 
   function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void onSubmit(e as unknown as React.FormEvent);
+      onSubmit(e as unknown as React.FormEvent);
     }
   }
 
@@ -369,9 +271,7 @@ export function JudgeChat() {
                   <AssistantBubble
                     result={item.result}
                     loading={loading}
-                    onSelectCandidate={selectCandidate}
-                    onFocusCardField={focusCardField}
-                    onTrySearch={trySearchChip}
+                    onPickCards={openPicker}
                   />
                 </div>
               </div>
@@ -391,88 +291,18 @@ export function JudgeChat() {
           onSubmit={onSubmit}
           className="mx-auto flex w-full max-w-3xl flex-col gap-2"
         >
-          <div className="flex items-center justify-between gap-2 px-1">
-            <button
-              type="button"
-              className="text-xs text-zinc-500 underline-offset-2 hover:underline"
-              onClick={() => setShowCardField((v) => !v)}
-            >
-              {showCardField ? "カード語句を隠す" : "カード語句（任意）"}
-            </button>
+          <div className="flex items-center justify-end gap-2 px-1">
             <ModelPicker
               value={modelId}
               disabled={loading}
               onChange={setModelId}
             />
           </div>
-          {cardQuery.trim() && !showCardField && (
-            <p className="truncate px-1 text-xs text-zinc-400">
-              カード: {cardQuery.trim()}
-            </p>
-          )}
 
-          {showCardField && (
-            <div className="px-1">
-              <label htmlFor={cardFieldId} className="sr-only">
-                カード語句
-              </label>
-              <input
-                id={cardFieldId}
-                ref={cardInputRef}
-                className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none ring-zinc-300 focus:ring-2"
-                value={cardQuery}
-                onChange={(e) => setCardQuery(e.target.value)}
-                disabled={loading}
-                placeholder="例: ドラッヘダーバンデ / レッドゾーン"
-                autoComplete="off"
-              />
-              {suggestLoading && (
-                <p className="mt-1 text-xs text-zinc-400">カード候補を検索中…</p>
-              )}
-              {suggest && !suggestLoading && (
-                <ul className="mt-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white text-sm shadow-sm">
-                  {suggest.kind === "resolved" ? (
-                    <li>
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left hover:bg-zinc-50"
-                        onClick={() =>
-                          pickSuggestion(suggest.card.officialName)
-                        }
-                      >
-                        <span className="font-medium">
-                          {suggest.card.officialName}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-zinc-500">
-                          {formatCardMeta(suggest.card)}
-                        </span>
-                      </button>
-                    </li>
-                  ) : (
-                    suggest.candidates.map((c) => (
-                      <li key={c.cardId}>
-                        <button
-                          type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-zinc-50 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-zinc-100"
-                          onClick={() => pickSuggestion(c.officialName)}
-                        >
-                          <span className="font-medium">{c.officialName}</span>
-                          <span className="mt-0.5 block text-xs text-zinc-500">
-                            {formatCardMeta(c)}
-                          </span>
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-end gap-2 rounded-[28px] border border-zinc-200 bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-zinc-300">
+          <div className="flex flex-col gap-2 rounded-[28px] border border-zinc-200 bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-zinc-300">
             <textarea
               ref={textareaRef}
-              className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed outline-none"
+              className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed outline-none"
               value={question}
               onChange={onTextareaInput}
               onKeyDown={onTextareaKeyDown}
@@ -480,22 +310,41 @@ export function JudgeChat() {
               rows={1}
               placeholder="裁定したい状況を書いてください…"
             />
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition disabled:opacity-40"
-              aria-label="送信"
-            >
-              <SendIcon />
-            </button>
+            {/* 送信ボタンの代替。位置・色・矢印を保ち、次に確定ステップが来ることだけ示す */}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={loading || !question.trim()}
+                className="flex items-center gap-1.5 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition disabled:opacity-40"
+              >
+                カード選択へ
+                <SendIcon />
+              </button>
+            </div>
           </div>
           <p className="px-1 text-center text-[11px] text-zinc-400">
-            Enter で送信 · Shift+Enter で改行 · 公式ソースのみ参照
+            Enter で次へ · Shift+Enter で改行 · 公式ソースのみ参照
           </p>
         </form>
       </div>
+
+      {pickerOpen && (
+        <CardPickerDialog
+          question={question}
+          initialQuery={pickerQuery}
+          submitting={loading}
+          onQuestionChange={setQuestion}
+          onCancel={() => setPickerOpen(false)}
+          onConfirm={confirmCards}
+        />
+      )}
     </div>
   );
+}
+
+/** ポップアップの検索窓の初期値。確定はせず、打ち直せる前提のヒント */
+function guessCardQuery(question: string): string {
+  return extractSearchKeywords(question)[0] ?? "";
 }
 
 function EmptyState() {
@@ -506,7 +355,7 @@ function EmptyState() {
       </p>
       <p className="max-w-md text-sm leading-relaxed text-zinc-500">
         デュエマの裁定を、公式カード・Q&A・総合ルールだけで確認します。
-        カード名が曖昧なときは候補を聞いてから続行します。
+        状況を書いたあと、関わるカードを選んで確定してから判定します。
       </p>
     </div>
   );
@@ -570,72 +419,52 @@ function ThinkingPanel({
   );
 }
 
-function CandidateList({
-  cards,
+/**
+ * 候補提示は送信前の確定ポップアップに一本化する。ここでは同じUIを開き直すだけで、
+ * バブルの中に別デザインの選択リストを置かない。
+ */
+function ReopenPickerButton({
+  term,
   loading,
-  onSelect,
+  onPickCards,
+  label = "カードを選び直す",
 }: {
-  cards: Array<{
-    cardId?: string;
-    card_id?: string;
-    officialName?: string;
-    official_name?: string;
-    civilizations?: string[];
-    cost?: string | null;
-    cardType?: string | null;
-    card_type?: string | null;
-  }>;
+  term?: string;
   loading: boolean;
-  onSelect: (cardId: string, cardName: string) => void;
+  onPickCards: (initialQuery?: string) => void;
+  label?: string;
 }) {
   return (
-    <ul className="flex flex-col gap-2">
-      {cards.map((c) => {
-        const id = c.cardId ?? c.card_id ?? "";
-        const name = c.officialName ?? c.official_name ?? "";
-        return (
-          <li key={id}>
-            <button
-              type="button"
-              disabled={loading || !id}
-              className="w-full rounded-2xl border border-zinc-200 bg-white p-3 text-left transition hover:bg-zinc-50 disabled:opacity-50"
-              onClick={() => onSelect(id, name)}
-            >
-              <span className="font-medium">{name}</span>
-              <span className="mt-1 block text-xs text-zinc-600">
-                {formatCardMeta(c)}
-              </span>
-              <span className="mt-0.5 block text-xs text-zinc-400">{id}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <button
+      type="button"
+      disabled={loading}
+      onClick={() => onPickCards(term)}
+      className="flex items-center gap-1.5 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition disabled:opacity-40"
+    >
+      {label}
+      <SendIcon />
+    </button>
   );
 }
 
 function AssistantBubble({
   result,
   loading,
-  onSelectCandidate,
-  onFocusCardField,
-  onTrySearch,
+  onPickCards,
 }: {
   result: JudgeResponse;
   loading: boolean;
-  onSelectCandidate: (cardId: string, cardName: string) => void;
-  onFocusCardField: () => void;
-  onTrySearch: (term: string) => void;
+  onPickCards: (initialQuery?: string) => void;
 }) {
   if (result.kind === "clarify") {
     return (
       <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-[15px]">
         <p className="font-medium text-amber-950">カードを確認してください</p>
         <p className="text-zinc-700">{result.resolve.note}</p>
-        <CandidateList
-          cards={result.resolve.candidates}
+        <ReopenPickerButton
+          term={result.resolve.query}
           loading={loading}
-          onSelect={onSelectCandidate}
+          onPickCards={onPickCards}
         />
       </section>
     );
@@ -643,56 +472,15 @@ function AssistantBubble({
 
   if (result.kind === "not_found") {
     const r = result.resolve;
-    const chips = [
-      r.cleanedQuery,
-      r.query,
-      ...(r.triedQueries ?? []).slice(0, 3),
-    ].filter((t, i, arr): t is string => Boolean(t) && arr.indexOf(t) === i);
-
     return (
       <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 text-[15px]">
         <p className="font-medium">カードが見つかりませんでした</p>
         <p className="text-zinc-700">{r.note}</p>
-        {r.suggestions && r.suggestions.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium text-zinc-700">
-              この候補かも？（選択で続行）
-            </p>
-            <CandidateList
-              cards={r.suggestions.map((s: ClarifyCandidate) => ({
-                card_id: s.card_id,
-                official_name: s.official_name,
-                civilizations: s.civilizations,
-                cost: s.cost,
-                card_type: s.card_type,
-              }))}
-              loading={loading}
-              onSelect={onSelectCandidate}
-            />
-          </div>
-        )}
-        {chips.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {chips.map((term) => (
-              <button
-                key={term}
-                type="button"
-                disabled={loading}
-                className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
-                onClick={() => onTrySearch(term)}
-              >
-                「{term}」をカード語句に
-              </button>
-            ))}
-          </div>
-        )}
-        <button
-          type="button"
-          className="text-xs text-zinc-600 underline underline-offset-2"
-          onClick={onFocusCardField}
-        >
-          カード語句を直す
-        </button>
+        <ReopenPickerButton
+          term={r.cleanedQuery ?? r.query}
+          loading={loading}
+          onPickCards={onPickCards}
+        />
       </section>
     );
   }
@@ -705,13 +493,7 @@ function AssistantBubble({
         {result.withhold.next_hint && (
           <p className="text-zinc-600">{result.withhold.next_hint}</p>
         )}
-        <button
-          type="button"
-          className="text-xs text-zinc-600 underline underline-offset-2"
-          onClick={onFocusCardField}
-        >
-          カード語句を直す
-        </button>
+        <ReopenPickerButton loading={loading} onPickCards={onPickCards} />
         <FooterMeta
           disclaimer={result.display.disclaimer}
           llm={result.debug?.llm}
