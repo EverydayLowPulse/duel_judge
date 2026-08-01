@@ -1,3 +1,5 @@
+import { ensureSeedAliases } from "../aliases/seed";
+import { getAliasEntry } from "../aliases/store";
 import type { SearchPlan } from "../llm/searchPlanner";
 import type { OfficialCard } from "../official/types";
 import { nameKeyMatches, normalizeCardNameKey } from "../resolve/nameMatch";
@@ -10,19 +12,46 @@ export type ScenarioCard = {
   card: OfficialCard;
 };
 
+/** 公式DBで確定できず、ユーザーに聞き返すべき言及 */
+export type ScenarioAskAbout = {
+  mention: string;
+  /** 候補があるときは clarify、無いときは not_found */
+  candidates: OfficialCard[];
+  note: string;
+};
+
+export type ResolveScenarioCardsResult = {
+  cards: ScenarioCard[];
+  askAbout: ScenarioAskAbout[];
+};
+
 /**
  * 検索プランが抽出したカード名を公式DBで解決する。
  * 曖昧候補は、質問で明示された能力名を公式能力テキストに持つものへ絞る。
+ *
+ * 読み仮名略称（例: 「ダーバンデ」）は正式名（ラテン綴り）と文字列一致しない。
+ * 略称辞書で 1件に確定したときは nameMatches で捨てない。
+ *
+ * 解決できない言及は黙って捨てず askAbout に残す（聞き返し用）。
  */
 export async function resolveScenarioCards(input: {
   plan: SearchPlan;
   primaryCard?: OfficialCard;
-}): Promise<ScenarioCard[]> {
+}): Promise<ResolveScenarioCardsResult> {
   const resolved: ScenarioCard[] = [];
+  const askAbout: ScenarioAskAbout[] = [];
+  await ensureSeedAliases();
 
   if (input.primaryCard) {
+    // プラン側の短い言及（例: 「大集合」）があれば mention に優先する。
+    // 正式名だけだとマナ列挙「マナに大集合、…」と突き合わせられない。
+    const primaryMention =
+      (await findMentionForCard(
+        input.plan.cardMentions.map((m) => m.mention),
+        input.primaryCard,
+      )) ?? input.primaryCard.officialName;
     resolved.push({
-      mention: input.primaryCard.officialName,
+      mention: primaryMention,
       role: "other",
       relevantAbility: "",
       card: input.primaryCard,
@@ -30,51 +59,82 @@ export async function resolveScenarioCards(input: {
   }
 
   for (const mention of input.plan.cardMentions.slice(0, 5)) {
-    if (
-      resolved.some(
-        (r) =>
-          normalize(r.mention) === normalize(mention.mention) ||
-          normalize(r.card.officialName) === normalize(mention.mention),
-      )
-    ) {
+    const existing = resolved.find(
+      (r) =>
+        normalize(r.mention) === normalize(mention.mention) ||
+        normalize(r.card.officialName) === normalize(mention.mention) ||
+        looksLikeCardMention(mention.mention, r.card.officialName),
+    );
+    if (existing) {
+      // より短いユーザー表記へ差し替える
+      if (
+        mention.mention.length < existing.mention.length &&
+        (looksLikeCardMention(mention.mention, existing.card.officialName) ||
+          (await aliasPointsToCard(mention.mention, existing.card)))
+      ) {
+        existing.mention = mention.mention;
+        if (mention.role) existing.role = mention.role;
+        if (mention.relevantAbility) {
+          existing.relevantAbility = mention.relevantAbility;
+        }
+      }
       continue;
     }
 
     // ユーザー指定の主カードが略称と一致するなら、公式検索を飛ばして紐づける
     if (
       input.primaryCard &&
-      looksLikeCardMention(mention.mention, input.primaryCard.officialName)
+      (looksLikeCardMention(mention.mention, input.primaryCard.officialName) ||
+        (await aliasPointsToCard(mention.mention, input.primaryCard)))
     ) {
       resolved.push({ ...mention, card: input.primaryCard });
       continue;
     }
 
-    let result = await resolveCardName(mention.mention, { maxDetails: 8 });
-    let candidates =
-      result.kind === "resolved"
-        ? [result.card]
-        : result.kind === "clarify"
-          ? result.candidates
-          : [];
+    const result = await resolveCardName(mention.mention, { maxDetails: 8 });
+
+    // 略称辞書などで 1件確定したときは正式名との文字列一致を要求しない
+    // （「ダーバンデ」↛「俳句爵 Drache der'Bande」）
+    if (result.kind === "resolved") {
+      addResolvedMention(resolved, mention, result.card);
+      continue;
+    }
+
+    let softCandidates = result.kind === "clarify" ? result.candidates : [];
+    let candidates = softCandidates.filter((card) =>
+      nameMatches(card, mention.mention),
+    );
 
     // 公式検索は部分一致かつ新着順に近いため、先頭8件に完全なカード名がないことがある。
     // 名前の対応が1件もなければ範囲を広げ、誤った近似カードは採用しない。
-    if (!candidates.some((card) => nameMatches(card, mention.mention))) {
-      result = await resolveCardName(mention.mention, {
+    if (candidates.length === 0) {
+      const widened = await resolveCardName(mention.mention, {
         maxDetails: 24,
         skipAlias: true,
       });
-      candidates =
-        result.kind === "resolved"
-          ? [result.card]
-          : result.kind === "clarify"
-            ? result.candidates
-            : [];
+      if (widened.kind === "resolved") {
+        addResolvedMention(resolved, mention, widened.card);
+        continue;
+      }
+      softCandidates =
+        widened.kind === "clarify" ? widened.candidates : softCandidates;
+      candidates = softCandidates.filter((card) =>
+        nameMatches(card, mention.mention),
+      );
     }
-    candidates = candidates.filter((card) =>
-      nameMatches(card, mention.mention),
-    );
-    if (candidates.length === 0) continue;
+
+    if (candidates.length === 0) {
+      // 推測で採用せず、候補があれば聞き返し / 無ければ未解決
+      askAbout.push({
+        mention: mention.mention,
+        candidates: softCandidates.slice(0, 8),
+        note:
+          softCandidates.length > 0
+            ? `「${mention.mention}」の正式名が特定できません。候補から選ぶか、カード語句に正式名を入れてください。`
+            : `「${mention.mention}」を公式DBで見つけられませんでした。正式名をカード語句に入れて再送してください。`,
+      });
+      continue;
+    }
 
     const ranked = rankCandidates(
       candidates,
@@ -90,20 +150,66 @@ export async function resolveScenarioCards(input: {
           ),
         )
       : ranked;
-    const selected = (matchingAbility.length ? matchingAbility : ranked).slice(
-      0,
-      3,
-    );
+    const pool = matchingAbility.length ? matchingAbility : ranked;
 
-    for (const card of selected) {
-      if (resolved.some((r) => r.card.officialName === card.officialName)) {
-        continue;
-      }
-      resolved.push({ ...mention, card });
+    // 複数候補は勝手に決めず聞き返す（1件だけ確定）
+    if (pool.length > 1) {
+      askAbout.push({
+        mention: mention.mention,
+        candidates: pool.slice(0, 8),
+        note: `「${mention.mention}」の候補が複数あります。どれを指すか選んでください。`,
+      });
+      continue;
     }
+
+    addResolvedMention(resolved, mention, pool[0]!);
   }
 
-  return resolved;
+  return { cards: resolved, askAbout };
+}
+
+/** 同一カードでも別表記の mention は残す（unresolvedMentions 判定用） */
+function addResolvedMention(
+  resolved: ScenarioCard[],
+  mention: SearchPlan["cardMentions"][number],
+  card: OfficialCard,
+): void {
+  const sameMention = resolved.some(
+    (r) =>
+      r.card.officialName === card.officialName &&
+      normalize(r.mention) === normalize(mention.mention),
+  );
+  if (sameMention) return;
+  resolved.push({ ...mention, card });
+}
+
+async function findMentionForCard(
+  mentions: string[],
+  card: OfficialCard,
+): Promise<string | undefined> {
+  for (const mention of mentions) {
+    if (
+      looksLikeCardMention(mention, card.officialName) ||
+      (await aliasPointsToCard(mention, card))
+    ) {
+      return mention;
+    }
+  }
+  return undefined;
+}
+
+/** 略称辞書の候補がこの公式カードを指すか */
+async function aliasPointsToCard(
+  mention: string,
+  card: OfficialCard,
+): Promise<boolean> {
+  const entry = await getAliasEntry(mention);
+  if (!entry) return false;
+  return entry.candidates.some(
+    (c) =>
+      c.cardId === card.cardId ||
+      normalize(c.officialName) === normalize(card.officialName),
+  );
 }
 
 function rankCandidates(

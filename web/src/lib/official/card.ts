@@ -105,6 +105,7 @@ export function parseCardDetailHtml(cardId: string, html: string): OfficialCard 
   const civilizationText = textBetween(flatBody, "文明", "レアリティ");
   const power = textBetween(flatBody, "パワー", "コスト");
   const cost = textBetween(flatBody, "コスト", "マナ");
+  const manaRaw = extractManaField(flatBody);
   const raceText = textBetween(flatBody, "種族", "イラストレーター");
 
   // ツインパクトは特殊能力ブロックが2つある。片面だけ取ると呪文側を落とす。
@@ -127,6 +128,7 @@ export function parseCardDetailHtml(cardId: string, html: string): OfficialCard 
     civilizations: splitCardField(civilizationText),
     power,
     cost,
+    manaValue: parseManaValue(manaRaw),
     races: splitCardField(raceText),
     abilityText,
     faces,
@@ -205,19 +207,39 @@ function splitCardField(value: string | null): string[] {
 }
 
 /**
+ * 「コスト … マナ N 種族」の並びからマナ数値だけを取る。
+ * 広い textBetween だと別テーブルの数字を拾ってしまうため、短い窓に限定する。
+ */
+function extractManaField(flatBody: string): string | null {
+  const text = flatBody.normalize("NFKC");
+  const m = text.match(/コスト\s*([0-9]+)\s*マナ\s*([0-9]+)\s*種族/);
+  if (m?.[2]) return m[2];
+  const m2 = text.match(/マナ\s*([0-9]{1,2})\s*種族/);
+  return m2?.[1] ?? null;
+}
+
+function parseManaValue(value: string | null): number | null {
+  if (!value) return null;
+  const m = value.normalize("NFKC").match(/^\s*(\d{1,2})\s*$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * キーワード → 候補カード一覧（詳細まで取得）。
  * 曖昧検索で大量ヒットしうるので detail 取得数に上限を付ける。
  *
- * 公式検索は中黒位置に敏感（「ドラン・ゴルゲルス」は0件、
- * 「ドラン・ゴル・ゲルス」はヒット）。ヒット0や名前不一致のときは
- * 接頭辞を短くして再検索し、正規化名で絞り込む。
+ * 公式検索は中黒の有無・位置に敏感（中黒なしや位置ズレで0件になりやすい）。
+ * buildOfficialSearchVariants が ・ 補完と接頭辞短縮を出し、正規化名で絞り込む。
  */
 export async function resolveCardCandidates(
   query: string,
   options?: { maxDetails?: number },
 ): Promise<CardResolveResult> {
   const maxDetails = options?.maxDetails ?? 12;
-  const variants = buildOfficialSearchVariants(query).slice(0, 8);
+  // 中黒補完候補を取りこぼさないよう、やや多めに試す
+  const variants = buildOfficialSearchVariants(query).slice(0, 12);
   const seenIds = new Set<string>();
   const candidates: OfficialCard[] = [];
   let totalHint: number | null = null;
@@ -236,6 +258,16 @@ export async function resolveCardCandidates(
     // 正規化後にクエリと一致する候補が取れたら打ち切り
     if (candidates.some((card) => nameKeyMatches(card.officialName, query))) {
       break;
+    }
+    // ヒットしても名前不一致だけのときは枠を空けて次の検索語を試す
+    // （例: 「大集合！アカネ&アサギ&コハク」全文検索がノイズを返すケース）
+    if (
+      candidates.length >= maxDetails &&
+      !candidates.some((card) => nameKeyMatches(card.officialName, query))
+    ) {
+      candidates.length = 0;
+      seenIds.clear();
+      continue;
     }
     if (candidates.length >= maxDetails) break;
   }

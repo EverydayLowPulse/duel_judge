@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { fetchJudge } from "@/lib/judge/fetchJudge";
 import type { JudgeResponse } from "@/lib/judge/types";
 
 export function JudgeLookup() {
@@ -9,6 +10,7 @@ export function JudgeLookup() {
   );
   const [cardQuery, setCardQuery] = useState("轟く侵略 レッドゾーン");
   const [loading, setLoading] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<JudgeResponse | null>(null);
 
@@ -18,21 +20,19 @@ export function JudgeLookup() {
     cardId?: string;
   }) {
     setLoading(true);
+    setProgressMessage("判定を開始しています…");
     setError(null);
     setResult(null);
     try {
-      const res = await fetch("/api/judge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const data = await fetchJudge(body, {
+        onProgress: (event) => setProgressMessage(event.message),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setResult(data as JudgeResponse);
+      setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setProgressMessage(null);
     }
   }
 
@@ -78,6 +78,12 @@ export function JudgeLookup() {
           {loading ? "判定中…" : "裁定する"}
         </button>
       </form>
+
+      {loading && (
+        <p className="text-sm text-zinc-500" aria-live="polite">
+          {progressMessage ?? "判定中…"}
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -175,6 +181,11 @@ export function JudgeLookup() {
             【確信度】{result.answer.confidence} —{" "}
             {result.answer.confidence_note}
           </p>
+          {result.debug?.llm && (
+            <p className="text-xs text-zinc-500">
+              【回答モデル】{result.debug.llm}
+            </p>
+          )}
           <p className="text-xs text-zinc-500">{result.display.disclaimer}</p>
         </section>
       )}

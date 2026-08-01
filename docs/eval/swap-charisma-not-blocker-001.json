@@ -1,0 +1,14 @@
+{
+  "id": "swap-charisma-not-blocker-001",
+  "set": "B",
+  "question": "SSS級侵略カリスマゾーンがいるとき、破壊時かわりにマナに置く効果のせいで侵略や入れ替えは失敗しますか？",
+  "gold": {
+    "conclusion_summary": "侵略は入れ替えではない。カリスマの『破壊される時かわりにマナ』は入れ替え阻害ではない。侵略自体は原則可能（他条件次第）。",
+    "must_cite_urls": [],
+    "must_rule_refs": [],
+    "must_conclusion_contains": ["侵略"],
+    "must_not_conclusion_contains": ["入れ替えが失敗", "701.26b"],
+    "allowed_confidence": ["low", "medium", "high"]
+  },
+  "notes": "決定的誤判定回帰。leaveReplacement が破壊→マナを blocksSwap にしないこと。略称だけで not_found にしない（正式名寄せ）。"
+}

@@ -1,4 +1,8 @@
 import type { EvidenceChunk } from "../answer/types";
+import { formatDeclarationPowerHints } from "../judge/facts/declarationPower";
+import { formatLeaveReplacementHints } from "../judge/facts/leaveReplacement";
+import { formatWrittenAbilityHints } from "../judge/facts/writtenAbilities";
+import type { ScenarioFacts } from "../judge/facts/types";
 import type { ScenarioCard } from "../judge/scenarioCards";
 import { generateJson } from "./generateJson";
 import { scenarioVerificationModelSchema } from "./schemas";
@@ -150,31 +154,37 @@ const SYSTEM = `あなたはデュエル・マスターズ裁定の前提条件�
 5. 宣言できたか（誘発・使用宣言）と、宣言後に解決できるかを混同しない。
 5b. 待機中能力の解決を誤らない:
    - 誘発して待機した能力は、ソースがバトルゾーンを離れても解決できる（110.5a）
-   - 革命チェンジで手札に戻った元攻撃クリーチャーの「攻撃する時」は入れ替え後も解決できる（qa/39355）
-   - 入れ替え後の「攻撃する時」と新クリーチャーの「出た時」は好きな順番で解決できる（qa/39067）
-   - 「場を離れたから攻撃時効果は使えない」という結論は、上記と矛盾しない説明がない限り禁止
-   - 質問が「出た時を使ってから攻撃時を使う」なら、原則 allowed（ハイパー面の有無など別条件は明示）
-6. カードテキストに「自分」「相手」がある場合、perspectiveChecks を必ず作る:
-   - 「自分／相手」は質問者視点ではなく、その能力を持つカードのコントローラー視点
-   - 強制選択カード（同期の妖精等）があるなら、そのカードの「相手」について必ず1件作る
-   - 質問者が自分のクリーチャーを選びたい場合でも、相手の「相手がクリーチャーを選ぶ時」の
-     「相手」に該当しうる
-   - 「自分のカードを対象にするから相手の強制選択は発動しない」という推論は禁止
-   - 同期の妖精など強制選択がある場合、スパイラル・ゲート型の公式Q&A（qa/43917）を
-     transferable=yes の有力候補として扱う（「クリーチャーを選ぶ」効果なら原則適用）
-   - ツインパクトは質問語（術・唱える・アンタップ等）から呪文側/クリーチャー側を先に確定する。
-     呪文側の「クリーチャーを1体選びタップ/アンタップ」を、クリーチャー側の攻撃時能力と取り違えない
+   - 入れ替えやゾーン移動のあとでも、すでに待機した能力は解決対象になりうる
+   - 「場を離れたから攻撃時効果は使えない」という結論は、取得済み根拠と矛盾しない説明がない限り禁止
+6. カードテキストに「自分」「相手」や強制選択（相手が選ぶ時／かわりに選ぶ）がある場合、perspectiveChecks を作る:
+   - 「自分／相手」は能力コントローラー視点（質問者視点ではない）
+   - 「自分のカードを選ぶから強制選択は発動しない」という推論は禁止
+   - 強制選択がありうるなら、取得済み類似Q&Aを transferable 判定の有力候補にする
+   - ツインパクトは質問語から呪文側/クリーチャー側を先に確定する
 7. 取得済みの各公式Q&Aについて precedentDiffs を必ず作る:
-   - casePremise: そのQ&A事例側の宣言時点の前提（どのカードが攻撃中で、どの条件を満たしていたか）
-   - thisCasePremise: 本件の宣言時点の前提
-   - sameDeclarationConditions: 宣言条件が実質同じか
-   - transferable: そのQ&Aの結論を本件へ移植してよいか
-   - 結論だけ似ていても、宣言時点の条件が違うなら transferable=no にする
-   - 例: 「レッドゾーン侵略＋革命チェンジが可能」のQ&Aでも、事例のチェンジ先が
-     攻撃開始時点ですでに条件を満たすカードで、本件のチェンジ先が満たさないなら
-     transferable=no。制約に「このQ&Aは本件の可能根拠に使えない」と書く
+   - casePremise / thisCasePremise / sameDeclarationConditions / transferable
+   - 結論だけ似ていても、宣言時点の条件が違うなら transferable=no
 8. transferable=no のQ&Aを、本件を「可能」とするための主根拠にしてはならない。
 9. カード候補が曖昧で結論が変わりうる場合は unknown にする。
+9b. 質問が「使用宣言の条件（攻撃時能力・侵略の種族条件など）」を問っていない場合:
+   - declarationChecks は空配列にしてよい
+   - 召喚時の置換（出る時かわりにマナへ等）や支払い可否だけなら、宣言条件 unknown を理由に verdict=unknown にしない
+10. 宣言時点のパワー計算:
+   - 印刷パワーだけで決め打ちしない
+   - 攻撃開始前から有効な修正（出す時のこのターン＋N、常在型など）は含める
+   - 「攻撃する時」誘発で後から上がるパワーは含めない
+   - 内部の「宣言時点パワー見積もり」があればそれを基準にする
+11. 入れ替え成功は条件充足とは別問題（進化専用ではない）:
+   - カード移動が正常にできないと入れ替え失敗（701.26b）
+   - 一部だけ離れる／本体が残る／場の置換で移動不能、のいずれでも not_allowed になりうる
+   - 内部の「入れ替え阻害」で blocksSwap=yes なら、入れ替え成功と結論してはならない
+12. 「カードに能力が書かれていない」判定:
+   - 注釈文（カッコ書き）は能力ではない（205.2a）
+   - 注釈のみのクリーチャーは能力なし扱い
+   - 内部の「印刷能力の有無」があればそれを優先する
+13. 置換効果:
+   - 置換は原則連鎖しない
+   - 置換ブレイクでシールドが離れる場合、通常ブレイク向けの『離れる時かわりに墓地』は適用されず手札へ（取得済みQ&A優先）
 
 公式カード情報と取得済み公式チャンクに無い属性や条件は作らないでください。
 この検証結果自体は出典ではなく、後段の回答を論理的に制約する内部データです。`;
@@ -183,6 +193,7 @@ export async function verifyScenarioWithGemini(input: {
   question: string;
   cards: ScenarioCard[];
   chunks: EvidenceChunk[];
+  facts?: ScenarioFacts;
 }): Promise<ScenarioVerification> {
   const cards = input.cards
     .map(
@@ -207,11 +218,21 @@ URL: ${card.detailUrl}`,
     )
     .join("\n\n");
 
+  const powerBlock =
+    formatDeclarationPowerHints(input.facts?.declarationPower ?? []) ??
+    "(なし)";
+  const leaveBlock =
+    formatLeaveReplacementHints(input.facts?.leaveReplacement ?? []) ??
+    "(なし)";
+  const writtenBlock =
+    formatWrittenAbilityHints(input.facts?.writtenAbilities ?? []) ?? "(なし)";
+
   return generateJson({
     system: SYSTEM,
-    user: `質問:\n${input.question}\n\n公式カード情報:\n${cards || "(なし)"}\n\n取得済み公式Q&A・ルール:\n${sources || "(なし)"}`,
+    user: `質問:\n${input.question}\n\n公式カード情報:\n${cards || "(なし)"}\n\n宣言時点パワー見積もり（内部。印刷だけで決め打ちしない）:\n${powerBlock}\n\n離脱置換（内部。入れ替え阻害の判定用）:\n${leaveBlock}\n\n印刷能力の有無（内部。注釈文は能力に数えない）:\n${writtenBlock}\n\n取得済み公式Q&A・ルール:\n${sources || "(なし)"}`,
     jsonSchema: schema,
     zodSchema: scenarioVerificationModelSchema,
     temperature: 0,
+    purpose: "verify",
   });
 }

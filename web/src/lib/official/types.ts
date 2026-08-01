@@ -12,6 +12,11 @@ export type OfficialCard = {
   civilizations: string[];
   power: string | null;
   cost: string | null;
+  /**
+   * マナゾーンでタップしたときに生むマナ数（公式の「マナ」欄）。
+   * 通常は 1。未取得の旧キャッシュでは undefined になりうる。
+   */
+  manaValue?: number | null;
   races: string[];
   /** 全面をラベル付きで結合した本文（証拠用） */
   abilityText: string;

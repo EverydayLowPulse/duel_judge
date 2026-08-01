@@ -1,10 +1,41 @@
 import type { AnswerDisplayMeta, AnswerPayload, WithholdPayload } from "../answer/types";
 import type { ResolveCardNameResult } from "../resolve/types";
+import type { JudgeProgressEvent, JudgeProgressHandler } from "./progress";
 
 export type JudgeRequest = {
   question: string;
   cardQuery?: string;
   cardId?: string;
+  /** カタログのモデルID（推奨）。指定時は provider より優先 */
+  model?: string;
+  /** 未指定ならサーバの LLM_PROVIDER。model 未指定時の後方互換 */
+  provider?: "auto" | "gemini" | "deepseek";
+};
+
+/** runJudge の実行オプション（HTTP JSON には載せない） */
+export type RunJudgeOptions = {
+  onProgress?: JudgeProgressHandler;
+};
+
+/** 推論過程パネル用（SSE progress と同型。最終応答にも残す） */
+export type ProcessTraceEntry = Pick<
+  JudgeProgressEvent,
+  "stage" | "message" | "kind" | "detail"
+>;
+
+type JudgeDebug = {
+  chunkIds: string[];
+  gateFailures?: string[];
+  gateAdjustments?: string[];
+  /** Gate で弾かれた／見直したときの過程（UI用） */
+  processTrace?: ProcessTraceEntry[];
+  /** 例: gemini:gemini-3-flash-preview → deepseek:deepseek-v4-flash */
+  llm?: string;
+  llmCalls?: Array<{
+    provider: "gemini" | "deepseek";
+    model: string;
+    purpose?: string;
+  }>;
 };
 
 export type JudgeResponse =
@@ -12,11 +43,7 @@ export type JudgeResponse =
       kind: "answer";
       answer: AnswerPayload;
       display: AnswerDisplayMeta;
-      debug?: {
-        chunkIds: string[];
-        gateFailures?: string[];
-        gateAdjustments?: string[];
-      };
+      debug?: JudgeDebug;
     }
   | {
       kind: "clarify";
@@ -30,9 +57,5 @@ export type JudgeResponse =
       kind: "withhold";
       withhold: WithholdPayload;
       display: AnswerDisplayMeta;
-      debug?: {
-        chunkIds: string[];
-        gateFailures?: string[];
-        gateAdjustments?: string[];
-      };
+      debug?: JudgeDebug;
     };

@@ -1,0 +1,16 @@
+{
+  "id": "evolution-justdiver-mach-001",
+  "set": "A",
+  "question": "ジャストダイバーが進化先に引き継がれ、マッハファイターが引き継がれない理由は",
+  "gold": {
+    "conclusion_summary": "ジャストダイバーは出た時に付与された継続的効果なので残る。マッハファイターは常在型なので進化元能力が無視されると失われ引き継がれない。",
+    "must_cite_urls": [
+      "https://dm.takaratomy.co.jp/rule/qa/46492/",
+      "https://dm.takaratomy.co.jp/rule/qa/46491/"
+    ],
+    "must_rule_refs": ["801.2"],
+    "must_conclusion_contains": ["常在"],
+    "allowed_confidence": ["high", "medium"]
+  },
+  "notes": "キーワード一括扱い禁止。Evidence Gate の言い換え落ちにも注意。"
+}

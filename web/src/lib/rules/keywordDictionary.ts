@@ -37,7 +37,21 @@ export const KEYWORD_RULE_DICTIONARY: KeywordRuleMapping[] = [
       "603.2f",
       "701.26a",
       "701.26b",
+      "803.2",
+      "803.2a",
     ],
+  },
+  {
+    key: "G-NEO",
+    label: "G-NEO",
+    aliases: ["G-NEO", "GNEO", "G-NEO進化", "GNEO進化"],
+    ruleRefs: ["803.1", "803.2", "803.2a", "701.26b"],
+  },
+  {
+    key: "スター進化",
+    label: "スター進化",
+    aliases: ["スター進化", "スター・進化"],
+    ruleRefs: ["701.26a", "701.26b"],
   },
   {
     key: "ニンジャストライク",
@@ -58,10 +72,29 @@ export const KEYWORD_RULE_DICTIONARY: KeywordRuleMapping[] = [
     ruleRefs: ["112.3a", "113.6", "113.6a"],
   },
   {
+    key: "Zラッシュ",
+    label: "Zラッシュ",
+    aliases: ["Zラッシュ", "Z・ラッシュ", "Z-ラッシュ"],
+    // 常在型（シールドが離れたときのハイパーモード解放）。詳細は公式Q&A 48466 系。
+    ruleRefs: ["110.1", "110.3c"],
+  },
+  {
     key: "無月の門",
     label: "無月の門",
     aliases: ["無月の門"],
     ruleRefs: ["603.2e", "603.2f"],
+  },
+  {
+    key: "ジャストダイバー",
+    label: "ジャストダイバー",
+    aliases: ["ジャストダイバー", "Just Diver"],
+    ruleRefs: ["801.2"],
+  },
+  {
+    key: "進化効果継続",
+    label: "進化と効果の継続",
+    aliases: ["進化先に引き継", "効果が引き継", "受けていた効果"],
+    ruleRefs: ["801.2", "801.4c"],
   },
   {
     key: "置換効果",
@@ -108,9 +141,21 @@ export function matchKeywordRules(texts: string[]): {
   };
 }
 
+/**
+ * 語句そのものがキーワード能力名か（カード名解決の対象外判定用）。
+ * 部分一致は使わない（「轟く侵略 レッドゾーン」を誤除外しないため）。
+ */
+export function isKnownKeywordAbilityName(mention: string): boolean {
+  const key = normalize(mention);
+  if (key.length < 2) return false;
+  return KEYWORD_RULE_DICTIONARY.some((entry) =>
+    [entry.key, ...entry.aliases].some((alias) => normalize(alias) === key),
+  );
+}
+
 function normalize(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[・･\s　「」『』《》≪≫]/g, "")
+    .replace(/[・･\s　「」『』《》≪≫\-－]/g, "")
     .toLowerCase();
 }

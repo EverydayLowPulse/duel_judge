@@ -1,0 +1,14 @@
+{
+  "id": "mana-payment-002-daishugo",
+  "set": "B",
+  "question": "マナに大集合、5000vt,5000vtの3枚が存在するとき、大集合の召喚は可能か",
+  "gold": {
+    "conclusion_summary": "可能。マナに光・水・自然があれば無色2で召喚できる（カード能力）。存在判定では多色1枚が複数文明を同時に満たせる。",
+    "must_cite_urls": [],
+    "must_rule_refs": [],
+    "must_conclusion_contains": ["可能"],
+    "must_not_conclusion_contains": ["不可能"],
+    "allowed_confidence": ["low", "medium", "high"]
+  },
+  "notes": "アンティハムト（通常多色支払い）と対になるケース。代替コストを通常の112.2aだけで不可能としないこと。"
+}

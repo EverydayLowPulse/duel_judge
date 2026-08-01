@@ -1,0 +1,12 @@
+{
+  "id": "mana-payment-001",
+  "set": "B",
+  "question": "マナにアンティハムト、5000vt, 5000vtの3枚が存在するとき、アンティハムトの召喚は可能か",
+  "gold": {
+    "conclusion_summary": "不可能。多色1枚は支払い時に1文明分にしかならず、光・火・自然を別カードで揃えられない。",
+    "must_cite_urls": [],
+    "must_rule_refs": ["112.2a", "107.2"],
+    "allowed_confidence": ["low", "medium"]
+  },
+  "notes": "カードテキストに無いマナ支払いルール。決定的validator + 総合ルール引用が主。Q&A直結は薄い。"
+}

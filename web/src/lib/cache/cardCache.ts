@@ -37,6 +37,19 @@ export async function readCardCache(cardId: string): Promise<OfficialCard | null
     ) {
       return null;
     }
+    // v4: マナ支払い検証用。manaValue が無い旧キャッシュは再取得する。
+    if (!("manaValue" in card)) {
+      return null;
+    }
+    // v5: 誤パース（例: mana=20）を捨てる。公式「マナ」欄は通常 1（最大でも小さめ）。
+    if (
+      card.manaValue != null &&
+      (!Number.isInteger(card.manaValue) ||
+        card.manaValue < 1 ||
+        card.manaValue > 9)
+    ) {
+      return null;
+    }
     return card;
   } catch {
     return null;

@@ -1,11 +1,23 @@
+import { enrichPrincipleEvidence } from "../answer/enrichPrincipleEvidence";
+import { pruneUnusedRuleEvidence } from "../answer/pruneUnusedRuleEvidence";
 import { runEvidenceGate } from "../answer/evidenceGate";
-import type { AnswerDisplayMeta, EvidenceChunk } from "../answer/types";
+import { repairEvidenceQuotes } from "../answer/repairEvidenceQuotes";
+import type {
+  AnswerDisplayMeta,
+  AnswerPayload,
+  EvidenceChunk,
+} from "../answer/types";
 import { generateAnswerWithGemini } from "../llm/gemini";
 import { planSearchWithGemini } from "../llm/searchPlanner";
 import {
   verifyScenarioWithGemini,
   type ScenarioVerification,
 } from "../llm/scenarioVerifier";
+import {
+  beginLlmUsageCapture,
+  endLlmUsageCapture,
+  summarizeLlmUsage,
+} from "../llm/usage";
 import type { OfficialCard } from "../official/types";
 import {
   resolveCardById,
@@ -13,19 +25,30 @@ import {
 } from "../resolve/resolveCardName";
 import type { ResolveCardNameResult } from "../resolve/types";
 import { RULE_PDF_URL } from "../rules/constants";
-import {
-  formatPendingAbilityConstraints,
-  matchPendingAbilityHints,
-} from "./pendingAbilities";
-import {
-  formatPerspectiveConstraints,
-  matchPerspectiveHints,
-} from "./perspective";
+import { isKnownKeywordAbilityName } from "../rules/keywordDictionary";
+import { resolveConceptsFromIssues } from "../rules/ontology/resolveConcepts";
+import { formatDeclarationPowerHints } from "./facts/declarationPower";
+import { buildEnrichedScenarioFacts } from "./facts/enrichManaCards";
+import { formatLeaveReplacementHints } from "./facts/leaveReplacement";
+import { formatWrittenAbilityHints } from "./facts/writtenAbilities";
+import { classifyIssues } from "./issues/classifyIssues";
 import { retrieveOfficialSources } from "./retrieveSources";
 import { resolveScenarioCards } from "./scenarioCards";
-import type { JudgeRequest, JudgeResponse } from "./types";
+import { progressEvent } from "./progress";
+import type {
+  JudgeRequest,
+  JudgeResponse,
+  ProcessTraceEntry,
+  RunJudgeOptions,
+} from "./types";
+import { buildDeterministicAnswer } from "./validators/buildDeterministicAnswer";
+import {
+  formatValidatorConstraints,
+  runValidators,
+} from "./validators/runValidators";
 
-export type { JudgeRequest, JudgeResponse } from "./types";
+export type { JudgeRequest, JudgeResponse, RunJudgeOptions } from "./types";
+export type { JudgeProgressEvent, JudgeProgressStage } from "./progress";
 
 const DISCLAIMER =
   "本回答は公式裁定の代替ではありません。大会ではジャッジに確認してください。";
@@ -37,11 +60,85 @@ function displayMeta(): AnswerDisplayMeta {
   };
 }
 
+function finalizeJudgeResponse(
+  result: JudgeResponse,
+  processTrace?: ProcessTraceEntry[],
+): JudgeResponse {
+  const calls = endLlmUsageCapture();
+  const llm = summarizeLlmUsage(calls);
+  if (result.kind !== "answer" && result.kind !== "withhold") {
+    return result;
+  }
+  const trace =
+    processTrace && processTrace.length > 0
+      ? processTrace
+      : result.debug?.processTrace;
+  return {
+    ...result,
+    debug: {
+      chunkIds: result.debug?.chunkIds ?? [],
+      gateFailures: result.debug?.gateFailures,
+      gateAdjustments: result.debug?.gateAdjustments,
+      processTrace: trace,
+      llm: llm ?? (result.kind === "answer" ? "deterministic (LLMなし)" : undefined),
+      llmCalls: calls.length > 0 ? calls : undefined,
+    },
+  };
+}
+
+function gateFailureMonologue(failures: string[]): string {
+  const joined = failures.slice(0, 3).join(" / ");
+  return (
+    `出典検証で弾かれた。${joined ? `（${joined}）` : ""}` +
+    " 公式ソースに無い引用や形式の崩れがあるので、同じ公式チャンクだけで見直しを行う。"
+  );
+}
+
 /**
  * 薄い裁定パイプライン（MVP）:
- * カード解決 → 検索プラン生成 → 複数検索・統合 → Gemini回答 → Evidence Gate
+ * カード解決 → Facts/Issues → 検索 → 決定的validators →
+ * （不可なら決定的回答）→ 残余は LLM 回答 → Evidence Gate
+ *
+ * options.onProgress で段階進捗を受け取れる（回答トークンのストリームではない）。
  */
-export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
+export async function runJudge(
+  req: JudgeRequest,
+  options?: RunJudgeOptions,
+): Promise<JudgeResponse> {
+  beginLlmUsageCapture();
+  const processTrace: ProcessTraceEntry[] = [];
+  try {
+    const result = await runJudgePipeline(req, {
+      ...options,
+      onProgress: (event) => {
+        processTrace.push({
+          stage: event.stage,
+          message: event.message,
+          kind: event.kind,
+          detail: event.detail,
+        });
+        options?.onProgress?.(event);
+      },
+    });
+    return finalizeJudgeResponse(result, processTrace);
+  } catch (error) {
+    endLlmUsageCapture();
+    throw error;
+  }
+}
+
+async function runJudgePipeline(
+  req: JudgeRequest,
+  options?: RunJudgeOptions,
+): Promise<JudgeResponse> {
+  const report = (
+    stage: Parameters<typeof progressEvent>[0],
+    message?: string,
+    extra?: Parameters<typeof progressEvent>[2],
+  ) => {
+    options?.onProgress?.(progressEvent(stage, message, extra));
+  };
+
   const question = req.question.trim();
   if (!question) {
     return {
@@ -59,9 +156,12 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
   let cardQuery = req.cardQuery?.trim();
   let resolve: ResolveCardNameResult | null = null;
 
+  // カード解決（公式0件時は内部で dmwiki 補助→公式再検索）
   if (req.cardId && cardQuery) {
+    report("resolve_card", "指定カードを取得中…");
     resolve = await resolveCardById(cardQuery, req.cardId);
   } else if (cardQuery) {
+    report("resolve_card");
     resolve = await resolveCardName(cardQuery);
   }
 
@@ -73,13 +173,59 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
   }
 
   const card = resolve?.kind === "resolved" ? resolve.card : undefined;
+  report("plan");
   const plan = await planSearchWithGemini({ question, card });
-  const scenarioCards = await resolveScenarioCards({
+  report("resolve_scenario");
+  const scenarioResolved = await resolveScenarioCards({
     plan,
     primaryCard: card,
   });
+  const scenarioCards = scenarioResolved.cards;
+
+  // 解決できなかった言及は推測で進めず聞き返す
+  const askWithCandidates = scenarioResolved.askAbout.filter(
+    (a) => a.candidates.length > 0,
+  );
+  if (askWithCandidates.length > 0) {
+    const first = askWithCandidates[0]!;
+    return {
+      kind: "clarify",
+      resolve: {
+        kind: "clarify",
+        query: first.mention,
+        source: "official_search",
+        note: first.note,
+        questions: askWithCandidates.map((a) => ({
+          about: a.mention,
+          candidates: a.candidates.map((c) => ({
+            official_name: c.officialName,
+            card_id: c.cardId,
+            detail_url: c.detailUrl,
+            cost: c.cost,
+            civilizations: c.civilizations,
+            card_type: c.cardType,
+          })),
+        })),
+        candidates: first.candidates,
+      },
+    };
+  }
+  const askUnresolved = scenarioResolved.askAbout.filter(
+    (a) => a.candidates.length === 0,
+  );
+  if (askUnresolved.length > 0) {
+    return {
+      kind: "not_found",
+      resolve: {
+        kind: "not_found",
+        query: askUnresolved.map((a) => a.mention).join(" / "),
+        note: askUnresolved.map((a) => a.note).join(" "),
+      },
+    };
+  }
+
   // カード語句で指定したカードに、略称メンションを安全に紐づける
-  // （ドッコイ等の別カードには付けない。名前の包含／部分列で判定）
+  // （ドッコイ等の別カードには付けない。名前の包含／部分列、または略称辞書で判定）
   if (card) {
     for (const mention of plan.cardMentions) {
       if (mention.role === "other") continue;
@@ -91,6 +237,8 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
             normalizeCardName(mention.mention),
       );
       if (alreadyResolved) continue;
+      // 読み仮名略称は正式名の部分列にならないことがある（ダーバンデ ↛ Drache）
+      // その場合は resolveScenarioCards 側の略称辞書解決に任せる
       if (!looksLikeCardMention(mention.mention, card.officialName)) continue;
       scenarioCards.push({
         mention: mention.mention,
@@ -104,12 +252,14 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
   const unresolvedMentions = plan.cardMentions.filter(
     (mention) =>
       mention.role !== "other" &&
+      !isKnownKeywordAbilityName(mention.mention) &&
       !scenarioCards.some(
         (resolved) =>
           normalizeCardName(resolved.mention) ===
             normalizeCardName(mention.mention) ||
           normalizeCardName(resolved.card.officialName) ===
-            normalizeCardName(mention.mention),
+            normalizeCardName(mention.mention) ||
+          looksLikeCardMention(mention.mention, resolved.card.officialName),
       ),
   );
   if (unresolvedMentions.length > 0) {
@@ -124,21 +274,29 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
       },
     };
   }
+  report("build_facts");
+  const { facts, extraCards } = await buildEnrichedScenarioFacts({
+    question,
+    plan,
+    scenarioCards,
+    primaryCard: card,
+  });
+  if (extraCards.length > 0) {
+    scenarioCards.push(...extraCards);
+  }
   const allCards = uniqueCards(scenarioCards.map((item) => item.card));
   const entityHints = [
     ...plan.entities,
     ...plan.cardMentions.map((item) => item.mention),
     ...allCards.map((item) => item.officialName),
   ];
-  const perspective = matchPerspectiveHints({
+  const issues = classifyIssues({
     question,
+    facts,
     entities: entityHints,
     cardTexts: allCards.map((item) => item.abilityText),
   });
-  const pendingAbilities = matchPendingAbilityHints({
-    question,
-    entities: entityHints,
-  });
+  const concepts = resolveConceptsFromIssues(issues.matches);
   const enrichedPlan = {
     ...plan,
     entities: unique([
@@ -146,8 +304,7 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
       ...plan.entities,
     ]),
     qaQueries: unique([
-      ...(pendingAbilities?.qaQueries ?? []),
-      ...(perspective?.qaQueries ?? []),
+      ...issues.qaQueries,
       ...plan.cardMentions
         .filter((item) => item.relevantAbility)
         .flatMap((item) => [
@@ -161,22 +318,19 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
         .filter((item) => item.relevantAbility)
         .map((item) => `${item.relevantAbility} 使用宣言`),
       ...plan.ruleQueries,
+      ...concepts.ruleRefs,
     ]).slice(0, 8),
   };
+  report("retrieve");
   const sources = await retrieveOfficialSources({
     question,
     plan: enrichedPlan,
     maxQaArticles: 5,
-    // キーワード辞書で注入する節を落とさないよう、検索枠より広めに取る。
+    // キーワード辞書・ontology の節を落とさないよう、検索枠より広めに取る。
     maxRuleHits: 8,
-    seedQaIds: unique([
-      ...(pendingAbilities?.seedQaIds ?? []),
-      ...(perspective?.seedQaIds ?? []),
-    ]),
-    extraQaQueries: unique([
-      ...(pendingAbilities?.qaQueries ?? []),
-      ...(perspective?.qaQueries ?? []),
-    ]),
+    seedQaIds: unique([...issues.seedQaIds, ...concepts.qaSeeds]),
+    extraQaQueries: issues.qaQueries,
+    seedRuleRefs: unique([...issues.ruleRefs, ...concepts.ruleRefs]),
   });
 
   const chunks: EvidenceChunk[] = [];
@@ -225,43 +379,112 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
     };
   }
 
+  report("validate");
+  const deterministic = runValidators({
+    question,
+    facts,
+    issues,
+    chunks,
+  });
+
+  // 決定的に可/不可が付いたら LLM を介さず回答を組み立てる（引用捏造・Evidence Gate 失敗を避ける）
+  // 「可能」の短絡: マナ／バニラ召喚／置換ブレイク行き先が allowed なら LLM に落とさない
+  const manaOrVanillaAllowed = deterministic.results.some(
+    (r) =>
+      (r.validatorId === "mana_payment" ||
+        r.validatorId === "no_written_ability_summon" ||
+        r.validatorId === "replacement_break_hand" ||
+        r.validatorId === "destroy_mana_not_swap_blocker") &&
+      r.verdict === "allowed",
+  );
+  const onlyShortCircuitAllowedIssue =
+    issues.matches.length > 0 &&
+    issues.matches.every(
+      (m) =>
+        m.kind === "mana_payment" || m.kind === "no_written_abilities",
+    );
+  const canShortCircuit =
+    deterministic.hardVerdict === "not_allowed" ||
+    (manaOrVanillaAllowed &&
+      !deterministic.results.some((r) => r.verdict === "not_allowed")) ||
+    (deterministic.hardVerdict === "allowed" && onlyShortCircuitAllowedIssue);
+  if (canShortCircuit) {
+    const aggregateForCraft =
+      deterministic.hardVerdict === "allowed" ||
+      deterministic.hardVerdict === "not_allowed"
+        ? deterministic
+        : {
+            ...deterministic,
+            hardVerdict: manaOrVanillaAllowed
+              ? ("allowed" as const)
+              : deterministic.hardVerdict,
+          };
+    const crafted = buildDeterministicAnswer({
+      question,
+      cardQuery,
+      cards: allCards,
+      chunks,
+      aggregate: aggregateForCraft,
+    });
+    if (crafted) {
+      report("evidence_gate");
+      const gate = runEvidenceGate(crafted, chunks);
+      if (gate.ok) {
+        return {
+          kind: "answer",
+          answer: gate.answer,
+          display: displayMeta(),
+          debug: {
+            chunkIds: chunks.map((c) => c.id),
+            gateAdjustments:
+              gate.adjustments.length > 0 ? gate.adjustments : undefined,
+          },
+        };
+      }
+    }
+  }
+
   let scenarioVerification: ScenarioVerification | undefined;
-  if (scenarioCards.length > 0) {
+  // 決定的に不可なら LLM 検証を省略して制約だけ渡す（コスト削減＋誤答抑止）
+  if (
+    deterministic.hardVerdict !== "not_allowed" &&
+    scenarioCards.length > 0
+  ) {
+    report("verify_scenario");
     scenarioVerification = await verifyScenarioWithGemini({
       question,
       cards: scenarioCards,
       chunks,
+      facts,
     });
   }
-  if (
+  // 宣言条件が unknown でも即 withhold しない。
+  // （DeepSeek 等が慎重に unknown を返すと、召喚置換など無関係な質問まで保留になりやすい）
+  // 検証結果は scenarioAnalysis 経由で回答 LLM を制約する。
+  const declarationUnknown =
     scenarioVerification?.verdict === "unknown" &&
     scenarioVerification.declarationChecks.some(
       (check) => check.conditionSatisfied === "unknown",
-    )
-  ) {
-    return {
-      kind: "withhold",
-      withhold: {
-        kind: "withhold",
-        reason:
-          "能力の使用宣言時点で条件を満たすか、公式情報だけでは確定できませんでした",
-        tried: [
-          "公式カード能力取得",
-          "公式Q&A・総合ルール検索",
-          "宣言時点の前提条件検証",
-        ],
-        next_hint:
-          "攻撃を開始したカードと、使いたい能力を持つカードの正式名を指定してください。",
-      },
-      display: displayMeta(),
-      debug: { chunkIds: chunks.map((chunk) => chunk.id) },
-    };
-  }
-  const perspectiveBlock = formatPerspectiveConstraints(perspective);
-  const pendingBlock = formatPendingAbilityConstraints(pendingAbilities);
+    ) &&
+    deterministic.hardVerdict !== "not_allowed";
   const scenarioAnalysis = [
-    pendingBlock,
-    perspectiveBlock,
+    formatValidatorConstraints(deterministic),
+    formatDeclarationPowerHints(facts.declarationPower ?? []),
+    formatLeaveReplacementHints(facts.leaveReplacement ?? []),
+    formatWrittenAbilityHints(facts.writtenAbilities ?? []),
+    issues.constraints.length > 0
+      ? `【論点制約（内部。evidenceには引用しない）】\n${issues.constraints
+          .map((c) => `- ${c}`)
+          .join("\n")}`
+      : undefined,
+    concepts.constraints.length > 0
+      ? `【RuleConcept制約（内部。evidenceには引用しない）】\n${concepts.constraints
+          .map((c) => `- ${c}`)
+          .join("\n")}`
+      : undefined,
+    declarationUnknown
+      ? "【宣言条件検証】一部条件が unknown。断定できない点は confidence を下げ、公式チャンクに無い条件は作らない。"
+      : undefined,
     scenarioVerification
       ? JSON.stringify(scenarioVerification, null, 2)
       : undefined,
@@ -269,6 +492,25 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
     .filter(Boolean)
     .join("\n\n") || undefined;
 
+  const principleRuleRefs = unique([
+    ...issues.ruleRefs,
+    ...concepts.ruleRefs,
+    ...deterministic.requiredRuleRefs,
+  ]);
+  const principleHints = [
+    ...issues.matches
+      .filter((m) => m.kind === "evolution_effect_carry")
+      .flatMap(() => [
+        "総合ルール 801.2 により、進化（侵略による重ね置きを含む）後も同一クリーチャーとして扱う。適用されていた効果は継続し、『各ターン最初の攻撃』などの回数制限も進化でリセットされない。",
+      ]),
+    ...issues.matches
+      .filter((m) => m.kind === "replacement_effect")
+      .flatMap(() => [
+        "置換効果は原則として連鎖しない。置換ブレイクでシールドが離れる場合、通常ブレイク向けの『シールドゾーンを離れる時、かわりに墓地へ』は適用されず手札に加わる（qa/48504）。",
+      ]),
+  ];
+
+  report("generate_answer");
   const draft = await generateAnswerWithGemini({
     question,
     cardQuery,
@@ -277,11 +519,35 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
     scenarioAnalysis,
     chunks,
   });
+  const enrichedDraft = enrichPrincipleEvidence({
+    answer: draft,
+    chunks,
+    requiredRuleRefs: principleRuleRefs,
+    principleHints,
+  });
+  const quoteRepaired = repairEvidenceQuotes({
+    answer: enrichedDraft.answer,
+    chunks,
+  });
+  const prunedDraft = pruneUnusedRuleEvidence(quoteRepaired.answer);
+  let pruneRemoved = prunedDraft.removed;
 
-  let gate = runEvidenceGate(draft, chunks);
+  // Gate 前の進捗（中身の草案テキストは推論過程に出さない）
+  report("generate_answer", "回答を組み立てた。出典照合に回す。", {
+    kind: "status",
+  });
+
+  report("evidence_gate");
+  let gate = runEvidenceGate(prunedDraft.answer, chunks);
   if (!gate.ok) {
     // 検索は成功していて引用形式だけが壊れた場合に備え、同じ公式チャンクで1回だけ修復する。
     // 新しい根拠をモデルに作らせず、Evidence Gate は修復後も必ず再実行する。
+    report(
+      "revise_answer",
+      gateFailureMonologue(gate.failures),
+      { kind: "monologue" },
+    );
+    report("revise_answer", "同じ公式チャンクだけで引用を直して再生成する…");
     const repaired = await generateAnswerWithGemini(
       {
         question,
@@ -293,10 +559,31 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
       },
       { validationFailures: gate.failures },
     );
-    gate = runEvidenceGate(repaired, chunks);
+    const enrichedRepaired = enrichPrincipleEvidence({
+      answer: repaired,
+      chunks,
+      requiredRuleRefs: principleRuleRefs,
+      principleHints,
+    });
+    const quoteRepairedAgain = repairEvidenceQuotes({
+      answer: enrichedRepaired.answer,
+      chunks,
+    });
+    const prunedRepaired = pruneUnusedRuleEvidence(quoteRepairedAgain.answer);
+    pruneRemoved = prunedRepaired.removed;
+    report("revise_answer", "見直し後の回答を組み立てた。", {
+      kind: "status",
+    });
+    report("evidence_gate", "見直し後の出典を再照合中…");
+    gate = runEvidenceGate(prunedRepaired.answer, chunks);
   }
 
   if (!gate.ok) {
+    report(
+      "revise_answer",
+      "見直しでも出典検証を通らなかった。根拠付きでは答えられないので保留する。",
+      { kind: "monologue" },
+    );
     return {
       kind: "withhold",
       withhold: gate.withhold,
@@ -308,6 +595,11 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
     };
   }
 
+  const quoteAdjustments = [
+    ...enrichedDraft.adjustments,
+    ...quoteRepaired.adjustments,
+    ...pruneRemoved.map((ref) => `未使用の rule ${ref} を evidence から除去`),
+  ];
   return {
     kind: "answer",
     answer: gate.answer,
@@ -315,7 +607,9 @@ export async function runJudge(req: JudgeRequest): Promise<JudgeResponse> {
     debug: {
       chunkIds: chunks.map((c) => c.id),
       gateAdjustments:
-        gate.adjustments.length > 0 ? gate.adjustments : undefined,
+        [...quoteAdjustments, ...gate.adjustments].length > 0
+          ? [...quoteAdjustments, ...gate.adjustments]
+          : undefined,
     },
   };
 }
@@ -330,6 +624,7 @@ function cardEvidenceText(card: OfficialCard): string {
 ${faceSummary}文明: ${card.civilizations.join("/") || "不明"}
 パワー: ${card.power ?? "不明"}
 コスト: ${card.cost ?? "不明"}
+マナ: ${card.manaValue ?? "不明"}
 種族: ${card.races.join("/") || "不明"}
 ${card.abilityText}`;
 }

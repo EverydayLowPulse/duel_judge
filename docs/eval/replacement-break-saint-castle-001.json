@@ -1,0 +1,14 @@
+{
+  "id": "replacement-break-saint-castle-001",
+  "set": "A",
+  "question": "我竜塔第一層セイントキャッスルの置換ブレイクを使ったとき、セイントキャッスルは手札に戻りますか（墓地置換は効きますか）",
+  "gold": {
+    "conclusion_summary": "可能（手札に加わる）。自身の置換ブレイクで離れるため、G城の『離れる時かわりに墓地』は適用されない。",
+    "must_cite_urls": ["https://dm.takaratomy.co.jp/rule/qa/48504/"],
+    "must_rule_refs": [],
+    "must_conclusion_contains": ["手札"],
+    "must_not_conclusion_contains": ["手札には戻りません", "手札に戻りません", "墓地に置かれ"],
+    "allowed_confidence": ["high", "medium"]
+  },
+  "notes": "『通常ブレイク』と混ぜると墓地に寄る。置換ブレイク適用時の行き先を問う。"
+}

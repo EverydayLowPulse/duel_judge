@@ -1,9 +1,39 @@
 import { upsertAlias } from "./store";
 import type { AliasCandidate } from "./types";
 
+const BANDE: AliasCandidate = {
+  officialName: "俳句爵 Drache der'Bande",
+  cardId: "dm25ex3-rp3S07",
+  detailUrl:
+    "https://dm.takaratomy.co.jp/card/detail/?id=dm25ex3-rp3S07",
+};
+
+/** DM26-EX2。公式 id は dm26ex2-SPRSEC004（旧シード dm26ex1-SP001 は誤り） */
+const CHARISMA: AliasCandidate = {
+  officialName: "SSS級侵略 カリスマゾーン",
+  cardId: "dm26ex2-SPRSEC004",
+  detailUrl:
+    "https://dm.takaratomy.co.jp/card/detail/?id=dm26ex2-SPRSEC004",
+};
+
+const CHARISMA_ALIASES = [
+  "カリスマゾーン",
+  "カリスマ・ゾーン",
+  "SSS級侵略カリスマゾーン",
+  "SSS級侵略 カリスマゾーン",
+  "SSS級侵略カリスマ・ゾーン",
+];
+
+const SAINT: AliasCandidate = {
+  officialName: "我竜塔第一層 セイント・キャッスル",
+  cardId: "dm26rp1-057",
+  detailUrl:
+    "https://dm.takaratomy.co.jp/card/detail/?id=dm26rp1-057",
+};
+
 /**
  * 公式検索では拾いにくい一般略称の初期辞書。
- * 1対N想定だが、ここでは確定度の高い1対1を入れる。
+ * 1対N想定だが、ここでは確定度の高い候補を入れる。
  */
 const SEED_ALIASES: Array<{ alias: string; candidates: AliasCandidate[] }> = [
   {
@@ -50,6 +80,20 @@ const SEED_ALIASES: Array<{ alias: string; candidates: AliasCandidate[] }> = [
       },
     ],
   },
+  // ラテン正式名 ↔ 読み仮名（公式 keyword 検索では拾いにくい）
+  { alias: "ドラッヘダーバンデ", candidates: [BANDE] },
+  { alias: "ドラッヘ・ダーバンデ", candidates: [BANDE] },
+  { alias: "ダーバンデ", candidates: [BANDE] },
+  { alias: "ドラッヘ", candidates: [BANDE] },
+  { alias: "バーダンデ", candidates: [BANDE] },
+  { alias: "drache derbande", candidates: [BANDE] },
+  { alias: "drache der'bande", candidates: [BANDE] },
+  ...CHARISMA_ALIASES.map((alias) => ({
+    alias,
+    candidates: [CHARISMA],
+  })),
+  { alias: "セイントキャッスル", candidates: [SAINT] },
+  { alias: "セイント・キャッスル", candidates: [SAINT] },
 ];
 
 let seeded = false;

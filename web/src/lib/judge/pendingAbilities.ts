@@ -1,7 +1,9 @@
 /**
- * 革命チェンジ後の「待機中能力」誤読を防ぐヒント。
- * 「場を離れた＝攻撃時効果は使えない」という短絡を止め、公式Q&Aを錨にする。
+ * 待機中能力の誤読を防ぐヒント。
+ * 「場を離れた＝もう解決できない」という短絡を止め、原則（110.5a）を固定する。
+ * 代表Q&A ID は ontology の qaSeeds 経由で注入し、ここには書かない。
  */
+import { getConceptById } from "../rules/ontology/concepts";
 
 export type PendingAbilityMatch = {
   label: string;
@@ -12,14 +14,13 @@ export type PendingAbilityMatch = {
 
 const PENDING_CONSTRAINTS = [
   "誘発して待機した能力は、その後にソースがバトルゾーンを離れても解決できる（総合ルール 110.5a）。「場にいないから使えない」は原則誤り。",
-  "革命チェンジで手札に戻った元攻撃クリーチャーの「攻撃する時」能力は、入れ替え後も解決できる（公式Q&A qa/39355）。",
-  "革命チェンジの入れ替え後、元クリーチャーの「攻撃する時」と新クリーチャーの「出た時」は好きな順番で解決できる（公式Q&A qa/39067）。",
-  "革命チェンジと元クリーチャーの「攻撃する時」はどちらも攻撃時に誘発・待機する。先に革命チェンジを解決してから「出た時」→「攻撃する時」の順も可能（qa/44747）。",
-  "「革命チェンジで離れたあとに攻撃時効果は使えない」という結論は、qa/39355 と矛盾しない説明ができない限り禁止。",
+  "入れ替えやゾーン移動のあとも、すでに待機した「攻撃する時」「出た時」等は解決順の対象になりうる。",
+  "使用宣言・誘発と、その後の解決を混同しない。",
+  "「離れたあとに攻撃時効果は使えない」という結論は、取得済み公式根拠と矛盾しない説明がない限り禁止。",
 ];
 
 /**
- * 革命チェンジと出た時／攻撃時の順序を問う質問を検出する。
+ * 入れ替え／ゾーン移動のあとの能力解決順を問う質問を検出する。
  */
 export function matchPendingAbilityHints(input: {
   question: string;
@@ -29,12 +30,14 @@ export function matchPendingAbilityHints(input: {
     [input.question, ...(input.entities ?? [])].join("\n"),
   );
 
-  const hasRevolution =
+  const hasSwapOrLeave =
     haystack.includes(normalize("革命チェンジ")) ||
-    haystack.includes(normalize("革命・チェンジ"));
-  if (!hasRevolution) return null;
+    haystack.includes(normalize("革命・チェンジ")) ||
+    haystack.includes(normalize("入れ替え")) ||
+    haystack.includes(normalize("離れた")) ||
+    haystack.includes(normalize("手札に戻"));
+  if (!hasSwapOrLeave) return null;
 
-  // 「AからBに革命チェンジできるか」だけでは拾わない（「から」は接続に多用される）
   const asksOrder =
     haystack.includes(normalize("出た時")) ||
     haystack.includes(normalize("攻撃する時")) ||
@@ -47,17 +50,19 @@ export function matchPendingAbilityHints(input: {
 
   if (!asksOrder) return null;
 
+  const concept = getConceptById("pending_abilities");
   return {
-    label: "革命チェンジ後の待機能力",
+    label: concept?.label ?? "誘発と待機・解決順",
     qaQueries: [
-      "革命チェンジ 攻撃する時 入れ替えた後",
-      "革命チェンジ 出た時 攻撃する時 順番",
-      "革命チェンジ 離れた 攻撃する時",
+      "入れ替え 攻撃する時 その後",
+      "離れた 攻撃する時 解決",
+      "出た時 攻撃する時 順番",
     ],
-    seedQaIds: ["39355", "39067", "44747"],
+    seedQaIds: concept?.qaSeeds ?? [],
     constraints: [
       ...PENDING_CONSTRAINTS,
-      "本件は革命チェンジ後の能力解決順の質問として扱い、qa/39355・qa/39067 を主根拠候補にする。",
+      ...(concept?.invariants.map((i) => `[待機] ${i}`) ?? []),
+      ...(concept?.commonFallacies.map((f) => `[待機・禁止推論] ${f}`) ?? []),
     ],
   };
 }

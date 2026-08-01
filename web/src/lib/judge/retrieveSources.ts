@@ -32,6 +32,8 @@ export async function retrieveOfficialSources(input: {
   seedQaIds?: string[];
   /** プラン外でも追加で走らせる Q&A 検索語 */
   extraQaQueries?: string[];
+  /** ontology / validator から必ず注入するルール節 */
+  seedRuleRefs?: string[];
 }): Promise<RetrievedSources> {
   const qaQueries = unique([
     ...(input.extraQaQueries ?? []),
@@ -57,6 +59,7 @@ export async function retrieveOfficialSources(input: {
     ...qaQueries,
     ...ruleQueries,
   ]);
+  const ontologyRuleRefs = unique(input.seedRuleRefs ?? []);
 
   const qaCandidates = new Map<
     string,
@@ -117,8 +120,10 @@ export async function retrieveOfficialSources(input: {
   }
 
   const ruleCandidates = new Map<string, RuleSearchHit>();
-  // 辞書ヒットは検索より先に入れ、最終候補からも落とさない。
-  const dictionaryHits = await lookupRuleChunksByRefs(keywordMatch.ruleRefs);
+  // 辞書・ontology の ruleRefs は検索より先に入れ、最終候補からも落とさない。
+  const dictionaryHits = await lookupRuleChunksByRefs(
+    unique([...keywordMatch.ruleRefs, ...ontologyRuleRefs]),
+  );
   for (const hit of dictionaryHits) {
     ruleCandidates.set(hit.ruleRef, hit);
   }

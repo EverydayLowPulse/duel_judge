@@ -15,7 +15,7 @@ async function main() {
   const question =
     "メカくしで自分のダーバンデをアンタップしたいんだが敵方に同期の妖精がいるときメカくしの術の効果吸われる？";
   const plan = await planSearchWithGemini({ question });
-  const scenarioCards = await resolveScenarioCards({ plan });
+  const { cards: scenarioCards } = await resolveScenarioCards({ plan });
   const allCards = scenarioCards.map((c) => c.card);
   const perspective = matchPerspectiveHints({
     question,

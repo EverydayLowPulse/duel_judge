@@ -56,12 +56,12 @@
 | `resolved_cards` | はい | 質問中の表記 → 確定した正式名 |
 | `resolved_cards[].card_id` | はい | 公式詳細の `id`。再開時に再検索を避ける |
 | `resolved_cards[].detail_url` | はい | 公式詳細URL |
-| `evidence` | はい（1件以上） | 根拠。空なら `withhold` にする |
+| `evidence` | はい（1件以上） | 根拠。空なら `withhold` にする。結論に使わないチャンクは載せない（関係薄いルールの羅列禁止） |
 | `evidence[].type` | はい | `qa` / `rule` / `card` のみ。wiki不可 |
 | `evidence[].rule_ref` | `type=rule` のとき必須 | ルール番号（例: `111.1`）。採点・突合用 |
 | `evidence[].url` | はい | `dm.takaratomy.co.jp` のみ |
 | `evidence[].quote` | はい | 取得済みテキストからの引用（要約・言い換え禁止） |
-| `reasoning` | `confidence` が `medium` / `low` のとき必須。`high` は任意 | 根拠から結論への橋渡し（短く） |
+| `reasoning` | `confidence` が `medium` / `low` のとき必須。`high` でも総合ルールがあるなら推奨 | 根拠から結論への橋渡し。Q&Aの言い換えだけで終わらず、取得済みルールの原理（例: 801.2＝進化は同一クリーチャーで効果継続）を1〜2文で書く |
 | `conclusion` | はい | 1〜2文で断言。前置きや免責は書かない |
 | `confidence` | はい | 下表 |
 | `confidence_note` | はい | 確信度の理由を短く |

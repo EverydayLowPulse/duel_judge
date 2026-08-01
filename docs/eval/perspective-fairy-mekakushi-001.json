@@ -1,0 +1,14 @@
+{
+  "id": "perspective-fairy-mekakushi-001",
+  "set": "A",
+  "question": "メカくしで自分のダーバンデをアンタップしたいんだが敵方に同期の妖精がいるときメカくしの術の効果吸われる？",
+  "gold": {
+    "conclusion_summary": "吸われる（不可能に近い）。必ず同期の妖精を選ぶ。自分のクリーチャーを選んでも強制選択は回避できない。",
+    "must_cite_urls": ["https://dm.takaratomy.co.jp/rule/qa/43917/"],
+    "must_rule_refs": [],
+    "must_conclusion_contains": ["妖精"],
+    "must_not_conclusion_contains": ["吸われない", "自分だけ選べ"],
+    "allowed_confidence": ["high", "medium"]
+  },
+  "notes": "視点誤読回帰。『自分のカードだから回避』は禁止推論。"
+}

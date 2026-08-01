@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PwaRegister } from "./components/PwaRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,26 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "duel_judge",
   description: "デュエマ裁定確認AIエージェント",
+  applicationName: "duel_judge",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "duel_judge",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#18181b",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -27,7 +48,10 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-dvh flex-col font-sans antialiased">
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

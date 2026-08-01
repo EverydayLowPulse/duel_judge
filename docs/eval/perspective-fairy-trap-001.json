@@ -1,0 +1,14 @@
+{
+  "id": "perspective-fairy-trap-001",
+  "set": "A",
+  "question": "相手の盤面に同期の妖精がいる状況で自分はトラップの地版を出しこのトラップの効果でタマシードを選ぶと宣言しトラップ自身をマナに置くことは可能ですか？",
+  "gold": {
+    "conclusion_summary": "不可能。クリーチャーまたはタマシードを選べる効果でも、同期の妖精が選べるなら必ず選ぶ。",
+    "must_cite_urls": ["https://dm.takaratomy.co.jp/rule/qa/45555/"],
+    "must_rule_refs": [],
+    "must_conclusion_contains": ["不可能"],
+    "must_not_conclusion_contains": ["可能です", "影響しません"],
+    "allowed_confidence": ["high", "medium"]
+  },
+  "notes": "OR選択でタマシード逃げは不可（qa/45555）。結論だけ可能で根拠が『クリーチャーのみ』なのも不可。"
+}

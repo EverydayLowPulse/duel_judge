@@ -1,12 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 import { requireEnv, resolveEnv } from "../env";
+import { getLlmModelOverride } from "../providerContext";
 
 export function getGeminiClient() {
   return new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") });
 }
 
 export function getGeminiModelName(): string {
-  return resolveEnv("GEMINI_MODEL") || "gemini-3.5-flash";
+  return (
+    getLlmModelOverride() ||
+    resolveEnv("GEMINI_MODEL") ||
+    "gemini-3.6-flash"
+  );
 }
 
 export async function generateJsonWithGemini(input: {

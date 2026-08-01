@@ -1,15 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { withOfficialRateLimit } from "../official/rateLimit";
 import { rulesDir } from "../paths";
-import { chunkRuleText } from "./chunk";
 import {
-  RULE_INDEX_FILENAME,
+  buildRuleIndexFromPdf,
+  downloadRulePdf,
+  parseRuleIndexJson,
   RULE_PDF_FILENAME,
-  RULE_PDF_URL,
-  RULE_VERSION,
-} from "./constants";
-import { extractPdfText } from "./extract";
+} from "./buildRuleIndex";
+import { RULE_INDEX_FILENAME } from "./constants";
 import type { RuleIndex } from "./types";
 
 let memory: RuleIndex | null = null;
@@ -23,7 +21,16 @@ function indexPath(): string {
 }
 
 /**
- * 総合ルール索引を返す。無ければ PDF 取得 → 抽出 → チャンクして保存。
+ * デプロイ同梱の索引（ビルド時に data/rules/bundled-index.json を生成）。
+ * Vercel の /tmp が空でも、ここから読めば PDF 再抽出が不要。
+ */
+export function bundledRulesIndexPath(): string {
+  return path.join(process.cwd(), "data", "rules", "bundled-index.json");
+}
+
+/**
+ * 総合ルール索引を返す。
+ * 優先順位: メモリ → 実行時キャッシュ → 同梱索引 → PDF取得・抽出
  */
 export async function ensureRuleIndex(options?: {
   forceRebuild?: boolean;
@@ -31,10 +38,17 @@ export async function ensureRuleIndex(options?: {
   if (!options?.forceRebuild && memory) return memory;
 
   if (!options?.forceRebuild) {
-    const cached = await readIndexFile();
+    const cached = await readIndexFile(indexPath());
     if (cached) {
       memory = cached;
       return cached;
+    }
+    const bundled = await readIndexFile(bundledRulesIndexPath());
+    if (bundled) {
+      memory = bundled;
+      // 可能なら実行時キャッシュにもコピー（同一インスタンスの再読込用）
+      await writeIndexFileBestEffort(bundled);
+      return bundled;
     }
   }
 
@@ -44,32 +58,25 @@ export async function ensureRuleIndex(options?: {
     await downloadRulePdf(pdf);
   }
 
-  const text = await extractPdfText(pdf);
-  const chunks = chunkRuleText(text);
-  if (chunks.length === 0) {
-    throw new Error("ルールPDFからチャンクを抽出できませんでした");
-  }
-
-  const index: RuleIndex = {
-    version: RULE_VERSION,
-    sourceUrl: RULE_PDF_URL,
-    sourceFile: RULE_PDF_FILENAME,
-    builtAt: new Date().toISOString(),
-    chunkCount: chunks.length,
-    chunks,
-  };
-
+  const index = await buildRuleIndexFromPdf(pdf);
   await fs.writeFile(indexPath(), JSON.stringify(index), "utf8");
   memory = index;
   return index;
 }
 
-async function readIndexFile(): Promise<RuleIndex | null> {
+async function writeIndexFileBestEffort(index: RuleIndex): Promise<void> {
   try {
-    const raw = await fs.readFile(indexPath(), "utf8");
-    const parsed = JSON.parse(raw) as RuleIndex;
-    if (!parsed.chunks?.length) return null;
-    return parsed;
+    await fs.mkdir(rulesDir(), { recursive: true });
+    await fs.writeFile(indexPath(), JSON.stringify(index), "utf8");
+  } catch {
+    // /tmp 以外・読み取り専用などでは無視
+  }
+}
+
+async function readIndexFile(file: string): Promise<RuleIndex | null> {
+  try {
+    const raw = await fs.readFile(file, "utf8");
+    return parseRuleIndexJson(raw);
   } catch {
     return null;
   }
@@ -82,20 +89,4 @@ async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function downloadRulePdf(dest: string): Promise<void> {
-  const buf = await withOfficialRateLimit(async () => {
-    const res = await fetch(RULE_PDF_URL, {
-      headers: {
-        "User-Agent": "duel_judge/0.1 (personal research; respectful rate limit)",
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      throw new Error(`ルールPDF取得失敗: HTTP ${res.status}`);
-    }
-    return Buffer.from(await res.arrayBuffer());
-  });
-  await fs.writeFile(dest, buf);
 }

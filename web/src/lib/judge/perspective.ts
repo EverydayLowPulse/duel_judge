@@ -1,89 +1,80 @@
 /**
- * 「自分／相手」の指示語は、能力を持つカードのコントローラー視点。
- * LLMが「自分のクリーチャーを選ぶ＝相手ではない」と誤読するのを防ぐための決定的ヒント。
+ * 「自分／相手」は能力コントローラー視点。
+ * 強制選択はカード名ではなく、能力テキストのパターンで検出する。
  */
+import { getConceptById } from "../rules/ontology/concepts";
 
 export type PerspectiveMatch = {
   label: string;
-  /** 追加で走らせる Q&A 検索語 */
   qaQueries: string[];
-  /** 必ず候補に残したい公式Q&A ID（類似判例の錨） */
   seedQaIds: string[];
-  /** 回答生成・検証へ渡す論理制約（出典ではない） */
   constraints: string[];
 };
 
-const FORCED_SELECTION_CARDS: Array<{
-  key: string;
-  aliases: string[];
-  seedQaIds: string[];
-  qaQueries: string[];
-}> = [
-  {
-    key: "同期の妖精",
-    aliases: ["同期の妖精", "シンクロフェアリー", "ド浮きの動悸"],
-    // 自分クリーチャーを選びたいが妖精に吸われる典型判例
-    seedQaIds: ["43917", "43918", "44101"],
-    qaQueries: [
-      "同期の妖精 選ぶ",
-      "同期の妖精 スパイラル",
-      "同期の妖精 自分のクリーチャー",
-    ],
-  },
+/** 強制選択・視点ずらしに見える能力テキスト（カード名に依存しない） */
+const FORCED_SELECTION_PATTERNS: RegExp[] = [
+  /相手が.{0,24}を選ぶ時/,
+  /相手が.{0,24}を選ぶなら/,
+  /相手がクリーチャーを選ぶ/,
+  /可能ならこのクリーチャーを選ぶ/,
+  /このクリーチャーを選ばなければ/,
+  /相手が.{0,16}選ぶ時[、,]?かわりに/,
+  /かわりに.{0,16}選ぶ/,
 ];
 
 const PERSPECTIVE_CONSTRAINTS = [
   "カードテキストの「自分」「相手」は、その能力を持つカードのコントローラー視点である。質問者視点ではない。",
-  "質問者が自分のクリーチャーを選びたい場合でも、相手の「相手がクリーチャーを選ぶ時」能力の「相手」に該当しうる。",
-  "「自分のカードを選ぶから相手の強制選択は発動しない」という推論は禁止。公式Q&A（例: スパイラル・ゲートと同期の妖精 = qa/43917）を優先する。",
-  "バトルゾーンのクリーチャーを選ぶ効果（「クリーチャーを1体選び〜」など、自分のみに限定されていない選択）には、同期の妖精の強制選択が適用される。",
-  "ツインパクトカードは表（クリーチャー側）と裏（呪文側）を混同しない。質問が「〜の術」「唱える」「アンタップしたい」なら呪文側の選択効果を見る。",
+  "質問者が自分のカードを選びたい場合でも、相手の「相手が〜を選ぶ時」能力の「相手」に該当しうる。",
+  "「自分のカードを選ぶから相手の強制選択は発動しない」という推論は禁止。取得済みの類似公式Q&Aを優先する。",
+  "バトルゾーンのクリーチャーを選ぶ効果（「クリーチャーを1体選び〜」など、自分のみに限定されていない選択）には、強制選択が適用されうる。",
+  "『クリーチャー1体またはタマシード1枚』のように OR 選択でも、強制選択側のクリーチャーが選べるなら必ずそれを選ぶ。タマシード専用フェーズに分けて回避できない（qa/45555）。",
+  "ツインパクトは表（クリーチャー側）と裏（呪文側）を混同しない。質問が「〜の術」「唱える」なら呪文側の選択効果を見る。",
 ];
 
 /**
- * 質問・カード能力から、視点誤読リスクと強制選択カードを検出する。
+ * 質問・解決済みカード能力から、視点誤読リスクと強制選択を検出する。
  */
 export function matchPerspectiveHints(input: {
   question: string;
   cardTexts?: string[];
   entities?: string[];
 }): PerspectiveMatch | null {
-  const haystack = normalize(
-    [input.question, ...(input.cardTexts ?? []), ...(input.entities ?? [])].join(
-      "\n",
-    ),
+  const cardTexts = input.cardTexts ?? [];
+  const forcedFromText = cardTexts.filter((text) =>
+    FORCED_SELECTION_PATTERNS.some((re) => re.test(text.normalize("NFKC"))),
   );
 
-  const matchedCards = FORCED_SELECTION_CARDS.filter((card) =>
-    [card.key, ...card.aliases].some((alias) =>
-      haystack.includes(normalize(alias)),
-    ),
-  );
+  // 能力テキストで強制選択が取れないときだけ、質問側の典型句で補助
+  const questionSuggestsForced =
+    /相手が.{0,12}選ぶ|強制選択|かわりに.{0,8}選/.test(
+      input.question.normalize("NFKC"),
+    );
 
-  const hasDeixis =
-    haystack.includes(normalize("相手が")) ||
-    haystack.includes(normalize("相手の")) ||
-    haystack.includes(normalize("自分の")) ||
-    haystack.includes(normalize("選ぶ"));
+  // 強制選択の兆候が無い一般の「自分／相手」質問までは広げない
+  if (forcedFromText.length === 0 && !questionSuggestsForced) return null;
 
-  if (matchedCards.length === 0 && !hasDeixis) return null;
-  // 強制選択カードが無いのに「選ぶ」だけの一般質問までは広げすぎない
-  if (matchedCards.length === 0) return null;
-
-  const qaQueries = unique(matchedCards.flatMap((c) => c.qaQueries));
-  const seedQaIds = unique(matchedCards.flatMap((c) => c.seedQaIds));
-  const labels = matchedCards.map((c) => c.key).join("・");
+  const concept = getConceptById("perspective");
+  const label =
+    forcedFromText.length > 0
+      ? "強制選択（能力テキスト）"
+      : "強制選択（質問主張）";
 
   return {
-    label: labels,
-    qaQueries,
-    seedQaIds,
+    label,
+    qaQueries: [
+      "相手が 選ぶ時 かわりに",
+      "クリーチャーを選ぶ 相手",
+      "強制選択 自分のクリーチャー",
+      "同期の妖精 タマシード 選ぶ",
+      "クリーチャーもタマシードも選べる",
+    ],
+    seedQaIds: concept?.qaSeeds ?? [],
     constraints: [
       ...PERSPECTIVE_CONSTRAINTS,
-      `本件では次の強制選択系カードが関与しうる: ${labels}`,
-      "自分のクリーチャーへ効果を向けたい場合でも、可能なら強制選択対象を選ぶ必要があるかを先に判定すること。",
-      "perspectiveChecks では強制選択カード側の「相手」を必ず検証し、相対ToController=yes であること。",
-      "結論が「吸われない／自分を選べる」なら、なぜ qa/43917 と矛盾しないかを constraints で説明できない限り not_allowed 側へ倒す。",
+      ...(concept?.invariants.map((i) => `[視点] ${i}`) ?? []),
+      ...(concept?.commonFallacies.map((f) => `[視点・禁止推論] ${f}`) ?? []),
+      "perspectiveChecks では強制選択側の「相手」を必ず検証し、relativeToController=yes であること。",
+      "結論が「強制選択を回避できる／自分だけを選べる／タマシードだけ選べる」なら、取得済み類似Q&A（特に qa/45555）と矛盾しない説明が必要。",
     ],
   };
 }
@@ -95,15 +86,4 @@ export function formatPerspectiveConstraints(
   return `【視点・強制選択の固定（内部制約。evidenceには引用しない）】\n${match.constraints
     .map((c) => `- ${c}`)
     .join("\n")}`;
-}
-
-function normalize(value: string): string {
-  return value
-    .normalize("NFKC")
-    .replace(/[・･\s　「」『』《》≪≫]/g, "")
-    .toLowerCase();
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
 }

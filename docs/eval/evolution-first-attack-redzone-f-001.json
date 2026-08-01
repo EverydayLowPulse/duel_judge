@@ -1,0 +1,14 @@
+{
+  "id": "evolution-first-attack-redzone-f-001",
+  "set": "A",
+  "question": "ダーバンデ攻撃時にカリスマゾーンに侵略しつつダーバンデ効果でメカくしの術唱えてアンタップ、そのうえで2度目の攻撃でレッドゾーンFに侵略したとして、攻撃の終わりにFの効果でアンタップは可能か",
+  "gold": {
+    "conclusion_summary": "不可能。進化／侵略後も同一クリーチャー。既に攻撃済みなら『各ターン最初の攻撃』ではない。",
+    "must_cite_urls": ["https://dm.takaratomy.co.jp/rule/qa/42363/"],
+    "must_rule_refs": ["801.2"],
+    "must_conclusion_contains": ["できません"],
+    "must_not_conclusion_contains": ["可能です", "可能。"],
+    "allowed_confidence": ["high", "medium"]
+  },
+  "notes": "同一クリーチャー回帰。『Fにとって初攻撃』は誤り。カリスマの破壊→マナを入れ替え阻害にしないこと。"
+}
