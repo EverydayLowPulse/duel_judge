@@ -418,6 +418,7 @@ async function runJudgePipeline(
     facts,
     issues,
     chunks,
+    cardAbilityTexts: allCards.map((c) => c.abilityText),
   });
 
   // 決定的に可/不可が付いたら LLM を介さず回答を組み立てる（引用捏造・Evidence Gate 失敗を避ける）
@@ -427,8 +428,12 @@ async function runJudgePipeline(
       (r.validatorId === "mana_payment" ||
         r.validatorId === "no_written_ability_summon" ||
         r.validatorId === "replacement_break_hand" ||
-        r.validatorId === "destroy_mana_not_swap_blocker") &&
+        r.validatorId === "destroy_mana_not_swap_blocker" ||
+        r.validatorId === "seal_pending_resolve") &&
       r.verdict === "allowed",
+  );
+  const hasCraftedConclusion = deterministic.results.some(
+    (r) => Boolean(r.craftedConclusion),
   );
   const onlyShortCircuitAllowedIssue =
     issues.matches.length > 0 &&
@@ -437,6 +442,7 @@ async function runJudgePipeline(
         m.kind === "mana_payment" || m.kind === "no_written_abilities",
     );
   const canShortCircuit =
+    hasCraftedConclusion ||
     deterministic.hardVerdict === "not_allowed" ||
     (manaOrVanillaAllowed &&
       !deterministic.results.some((r) => r.verdict === "not_allowed")) ||
@@ -540,6 +546,7 @@ async function runJudgePipeline(
       .filter((m) => m.kind === "replacement_effect")
       .flatMap(() => [
         "置換効果は原則として連鎖しない。置換ブレイクでシールドが離れる場合、通常ブレイク向けの『シールドゾーンを離れる時、かわりに墓地へ』は適用されず手札に加わる（qa/48504）。",
+        "置換が句点（。）で区切られる文章の一部だけを変えたとき、その句点の範囲だけが置換済み。同じ能力の別句点は別イベントとして残り、一部置換＝能力全体が無効ではない（101.5a）。",
       ]),
     ...issues.matches
       .filter((m) => m.kind === "pending_abilities")

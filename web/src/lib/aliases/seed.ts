@@ -31,6 +31,20 @@ const SAINT: AliasCandidate = {
     "https://dm.takaratomy.co.jp/card/detail/?id=dm26rp1-057",
 };
 
+const MAGATSUKAZE: AliasCandidate = {
+  officialName: "飛ベル津バサ「曲通風」",
+  cardId: "promoy24-097",
+  detailUrl:
+    "https://dm.takaratomy.co.jp/card/detail/?id=promoy24-097",
+};
+
+const ASM_RADIO: AliasCandidate = {
+  officialName: "キユリのASMラジオ",
+  cardId: "dm24rp1-TR10",
+  detailUrl:
+    "https://dm.takaratomy.co.jp/card/detail/?id=dm24rp1-TR10",
+};
+
 /**
  * 公式検索では拾いにくい一般略称の初期辞書。
  * 1対N想定だが、ここでは確定度の高い候補を入れる。
@@ -94,6 +108,12 @@ const SEED_ALIASES: Array<{ alias: string; candidates: AliasCandidate[] }> = [
   })),
   { alias: "セイントキャッスル", candidates: [SAINT] },
   { alias: "セイント・キャッスル", candidates: [SAINT] },
+  { alias: "まがつかぜ", candidates: [MAGATSUKAZE] },
+  { alias: "マガツカゼ", candidates: [MAGATSUKAZE] },
+  { alias: "曲通風", candidates: [MAGATSUKAZE] },
+  { alias: "asmラジオ", candidates: [ASM_RADIO] },
+  { alias: "ASMラジオ", candidates: [ASM_RADIO] },
+  { alias: "キユリのASM", candidates: [ASM_RADIO] },
 ];
 
 let seeded = false;

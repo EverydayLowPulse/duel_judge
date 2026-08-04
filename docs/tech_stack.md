@@ -40,7 +40,6 @@ npx vercel --prod
 
 ---
 
-- 開発用確認UI: `http://localhost:3000/dev`
 - 本番チャット: `http://localhost:3000/`（状況入力 → カード確定ポップアップ → answer表示。フローは `docs/project.md`）
 - カード名解決: `GET /api/cards?q=レッドゾーン`（確定は `POST` で `cardId`）
   - 公式0件時は dmwiki 検索で正式名候補 → 公式DB再突合（`CARD_RESOLVE_WEB=auto|on|off`）。論拠には使わない

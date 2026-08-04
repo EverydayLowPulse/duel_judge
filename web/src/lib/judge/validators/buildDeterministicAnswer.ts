@@ -1,6 +1,9 @@
 import type { AnswerPayload, EvidenceChunk, EvidenceItem } from "../../answer/types";
 import type { OfficialCard } from "../../official/types";
-import type { AggregateValidatorResult, ValidatorResult } from "./types";
+import type {
+  AggregateValidatorResult,
+  ValidatorResult,
+} from "./types";
 
 /**
  * 決定的 validator の hardVerdict から LLM を介さず AnswerPayload を組み立てる。
@@ -13,6 +16,11 @@ export function buildDeterministicAnswer(input: {
   chunks: EvidenceChunk[];
   aggregate: AggregateValidatorResult;
 }): AnswerPayload | null {
+  const crafted = input.aggregate.results.find((r) => r.craftedConclusion);
+  if (crafted?.craftedConclusion) {
+    return buildCraftedAnswer(input, crafted);
+  }
+
   const verdict = input.aggregate.hardVerdict;
   if (verdict !== "not_allowed" && verdict !== "allowed") return null;
 
@@ -55,6 +63,49 @@ export function buildDeterministicAnswer(input: {
       : hasQaEvidence
         ? "決定的validatorによる判定。類似の公式Q&Aと総合ルールを根拠にしている。"
         : "決定的validatorによる判定。公式Q&Aの直接該当は使わず、総合ルール/カード能力からの機械判定。",
+  };
+}
+
+function buildCraftedAnswer(
+  input: {
+    question: string;
+    cardQuery?: string;
+    cards: OfficialCard[];
+    chunks: EvidenceChunk[];
+  },
+  result: ValidatorResult,
+): AnswerPayload | null {
+  const evidence = pickEvidence(
+    result,
+    input.chunks,
+    result.verdict === "not_allowed" ? "not_allowed" : "allowed",
+  );
+  // ルール根拠が取れないなら短絡しない（Gate で落とすより LLM に残す）
+  if (!evidence.some((e) => e.type === "rule")) return null;
+
+  const primary = input.cards[0];
+  const resolved_cards = input.cards.map((card) => ({
+    query:
+      card === primary && input.cardQuery
+        ? input.cardQuery
+        : card.officialName,
+    official_name: card.officialName,
+    card_id: card.cardId,
+    detail_url: card.detailUrl,
+  }));
+
+  const hasQaEvidence = evidence.some((e) => e.type === "qa");
+  return {
+    kind: "answer",
+    resolved_cards,
+    evidence,
+    reasoning: result.craftedReasoning ?? result.reason,
+    conclusion: result.craftedConclusion!,
+    confidence: hasQaEvidence ? "medium" : "low",
+    confidence_note:
+      result.validatorId === "seal_pending_resolve"
+        ? "決定的validatorによる判定（誘発と解決の分離／110.5a・封印116.2a）。"
+        : "決定的validatorによる判定（機械組み立て結論）。",
   };
 }
 

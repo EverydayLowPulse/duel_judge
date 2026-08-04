@@ -12,6 +12,10 @@ import {
   validateReplacementBreakHand,
 } from "./replacementBreakHand";
 import {
+  shouldRunSealPendingResolve,
+  validateSealPendingResolve,
+} from "./sealPendingResolve";
+import {
   shouldRunSwapLeaveReplacement,
   validateSwapLeaveReplacement,
 } from "./swapLeaveReplacement";
@@ -59,6 +63,10 @@ export function runValidators(input: ValidatorInput): AggregateValidatorResult {
 
   if (shouldRunDestroyManaNotSwapBlocker(input)) {
     results.push(validateDestroyManaNotSwapBlocker(input));
+  }
+
+  if (shouldRunSealPendingResolve(input)) {
+    results.push(validateSealPendingResolve(input));
   }
 
   const constraintsForAnswer = results.flatMap((r) => r.constraintsForAnswer);

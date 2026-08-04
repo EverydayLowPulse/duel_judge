@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { extractSearchKeywords } from "@/lib/judge/extractKeywords";
 import { fetchJudge } from "@/lib/judge/fetchJudge";
 import type { JudgeProgressEvent } from "@/lib/judge/progress";
 import type { JudgeResponse } from "@/lib/judge/types";
@@ -174,8 +172,9 @@ export function JudgeChat() {
     openPicker();
   }
 
+  /** 通常は空で開く。clarify 等から「この語で開き直す」ときだけ初期語を渡す */
   function openPicker(initialQuery?: string) {
-    setPickerQuery(initialQuery ?? guessCardQuery(question));
+    setPickerQuery(initialQuery?.trim() ?? "");
     setPickerOpen(true);
   }
 
@@ -222,12 +221,6 @@ export function JudgeChat() {
           </h1>
           <p className="text-xs text-zinc-500">デュエマ裁定確認</p>
         </div>
-        <Link
-          href="/dev"
-          className="text-xs text-zinc-400 transition hover:text-zinc-600"
-        >
-          開発用
-        </Link>
       </header>
 
       <div
@@ -302,7 +295,8 @@ export function JudgeChat() {
           <div className="flex flex-col gap-2 rounded-[28px] border border-zinc-200 bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-zinc-300">
             <textarea
               ref={textareaRef}
-              className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed outline-none"
+              // text-base(=16px): iOS Safari/PWA は 16px 未満でフォーカス時にズームし、閉じても戻らない
+              className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-2 py-2 text-base leading-relaxed outline-none"
               value={question}
               onChange={onTextareaInput}
               onKeyDown={onTextareaKeyDown}
@@ -340,11 +334,6 @@ export function JudgeChat() {
       )}
     </div>
   );
-}
-
-/** ポップアップの検索窓の初期値。確定はせず、打ち直せる前提のヒント */
-function guessCardQuery(question: string): string {
-  return extractSearchKeywords(question)[0] ?? "";
 }
 
 function EmptyState() {

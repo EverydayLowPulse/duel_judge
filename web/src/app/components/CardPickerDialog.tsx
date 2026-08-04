@@ -68,8 +68,8 @@ function formatOptionMeta(option: CardOption): string {
 /**
  * 送信前にカードを確定させるステップ（2/2）。
  *
- * 質問文からの推定に頼らず、ユーザー自身に選び切らせる。カード0枚での送信は
- * 「カードは関係ない質問」を明示的に押した場合だけ許す（こちらで推定しない）。
+ * 質問文からの推定に頼らず、ユーザー自身に選び切らせる。
+ * 0枚・1枚で進むときは確認を挟む（取りこぼし防止）。
  * 候補0件のときも閉じさせず、この中で検索し直せるようにする。
  */
 export function CardPickerDialog({
@@ -93,11 +93,18 @@ export function CardPickerDialog({
   const [search, setSearch] = useState<SearchState>({ kind: "idle" });
   const [picks, setPicks] = useState<CardPick[]>([]);
   const [editingQuestion, setEditingQuestion] = useState(false);
+  /** 0枚 / 1枚で進むときの弱い確認。動的判定ではなく枚数だけの一律確認 */
+  const [confirmGate, setConfirmGate] = useState<null | "zero" | "one">(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
 
   useEffect(() => {
-    searchInputRef.current?.focus();
+    // タッチ端末では開いた瞬間の自動フォーカス＋キーボードでレイアウトが崩れるのでやらない。
+    // （iOS は 16px 未満入力だとさらにページズームして戻らない）
+    const finePointer =
+      typeof window !== "undefined" &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (finePointer) searchInputRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -107,6 +114,13 @@ export function CardPickerDialog({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onCancel]);
+
+  function focusSearchIfDesktop() {
+    const finePointer =
+      typeof window !== "undefined" &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (finePointer) searchInputRef.current?.focus();
+  }
 
   async function runSearch(raw: string) {
     const q = raw.trim();
@@ -165,20 +179,40 @@ export function CardPickerDialog({
   }
 
   function togglePick(option: CardOption) {
-    setPicks((prev) => {
-      if (prev.some((p) => p.cardId === option.cardId)) {
-        return prev.filter((p) => p.cardId !== option.cardId);
-      }
-      return [
-        ...prev,
-        {
-          cardId: option.cardId,
-          // ユーザーが打った語をそのまま渡す（略称辞書の学習と事実抽出に使う）
-          mention: query.trim() || option.officialName,
-          officialName: option.officialName,
-        },
-      ];
-    });
+    const already = picks.some((p) => p.cardId === option.cardId);
+    if (already) {
+      setPicks((prev) => prev.filter((p) => p.cardId !== option.cardId));
+      setConfirmGate(null);
+      return;
+    }
+
+    const mention = query.trim() || option.officialName;
+    setPicks((prev) => [
+      ...prev,
+      {
+        cardId: option.cardId,
+        // ユーザーが打った語をそのまま渡す（略称辞書の学習と事実抽出に使う）
+        mention,
+        officialName: option.officialName,
+      },
+    ]);
+    setConfirmGate(null);
+    // 次のカードを打ちやすくする。検索直後の伸ばし打ちは残し、選択時だけ消す
+    setQuery("");
+    setSearch({ kind: "idle" });
+    requestAnimationFrame(() => focusSearchIfDesktop());
+  }
+
+  function requestConfirm() {
+    if (picks.length === 0) {
+      setConfirmGate("zero");
+      return;
+    }
+    if (picks.length === 1) {
+      setConfirmGate("one");
+      return;
+    }
+    onConfirm(picks);
   }
 
   const busy = submitting || search.kind === "loading";
@@ -191,27 +225,42 @@ export function CardPickerDialog({
         aria-labelledby={titleId}
         className="flex h-dvh w-full flex-col bg-white sm:h-[85vh] sm:max-w-3xl sm:rounded-3xl sm:shadow-xl"
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-          <div className="min-w-0">
-            <h2 id={titleId} className="text-[15px] font-semibold">
-              カードを確定（2/2）
-            </h2>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              質問に関わるカードを選んでください
-            </p>
-          </div>
+        <header className="flex shrink-0 items-start border-b border-zinc-200 px-3 py-3 sm:justify-between sm:gap-3 sm:px-5 sm:py-5">
+          {/* スマホ: タイトル行に揃えた‹のみ。PC: 右上× */}
           <button
             type="button"
             onClick={onCancel}
             disabled={submitting}
-            className="-mr-1 shrink-0 rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-40"
+            className="-ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-800 transition active:opacity-50 disabled:opacity-40 sm:hidden"
+            aria-label="質問入力に戻る"
+          >
+            <BackChevronIcon />
+          </button>
+          <div className="min-w-0 flex-1 space-y-0.5 pt-0.5 text-center sm:space-y-1.5 sm:pt-0 sm:text-left">
+            <h2
+              id={titleId}
+              className="text-lg font-semibold leading-7 tracking-tight sm:text-xl sm:leading-tight"
+            >
+              カードを確定（2/2）
+            </h2>
+            <p className="truncate text-[15px] text-zinc-600 sm:text-base sm:leading-snug">
+              関連するカードをすべて選んでください
+            </p>
+          </div>
+          {/* タイトル中央寄せ用（戻るボタンと同幅） */}
+          <span className="inline-flex h-7 w-7 shrink-0 sm:hidden" aria-hidden />
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="-mr-1 hidden shrink-0 rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-40 sm:inline-flex"
             aria-label="閉じて質問に戻る"
           >
             <CloseIcon />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div className="shrink-0 space-y-2 border-b border-zinc-100 px-4 py-2.5 sm:space-y-3 sm:py-3">
           <QuestionPreview
             question={question}
             editing={editingQuestion}
@@ -220,31 +269,91 @@ export function CardPickerDialog({
             onChange={onQuestionChange}
           />
 
+          {/*
+            検索行はスクロール領域の外に置き、キーボード表示時にボタンが見切れないようにする。
+            text-base(=16px) は iOS Safari の入力フォーカス自動ズーム回避（text-sm だとズームして戻らない）。
+            見た目の高さは padding だけ下げる（フォントは触らない）。
+          */}
           <form
-            className="mt-3 flex gap-2"
+            className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               void runSearch(query);
             }}
           >
-            <input
-              ref={searchInputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              disabled={submitting}
-              placeholder="カード名・略称で検索（例: レッドゾーン）"
-              autoComplete="off"
-              className="flex-1 rounded-2xl border border-zinc-300 px-3 py-2 text-sm outline-none ring-zinc-300 focus:ring-2 disabled:opacity-60"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={submitting}
+                placeholder="カード名を検索"
+                autoComplete="off"
+                enterKeyHint="search"
+                className="w-full rounded-xl border border-zinc-300 py-2 pl-3 pr-9 text-base outline-none ring-zinc-300 focus:ring-2 disabled:opacity-60 sm:rounded-2xl sm:py-2.5"
+              />
+              {query.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setSearch({ kind: "idle" });
+                    focusSearchIfDesktop();
+                  }}
+                  disabled={submitting}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-40"
+                  aria-label="検索語を消す"
+                >
+                  <CloseIcon />
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               disabled={busy}
-              className="shrink-0 rounded-2xl border border-zinc-300 px-4 py-2 text-sm font-medium transition hover:bg-zinc-50 disabled:opacity-40"
+              className="shrink-0 rounded-xl border border-zinc-300 px-3 py-2 text-base font-medium transition hover:bg-zinc-50 disabled:opacity-40 sm:rounded-2xl sm:px-4 sm:py-2.5"
             >
               検索
             </button>
           </form>
 
+          {picks.length > 0 && (
+            <ul className="flex flex-wrap justify-start gap-1.5 sm:gap-2">
+              {picks.map((pick) => (
+                <li
+                  key={pick.cardId}
+                  className="min-w-0 max-w-[calc(50%-0.1875rem)] sm:max-w-none"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPicks((prev) =>
+                        prev.filter((p) => p.cardId !== pick.cardId),
+                      );
+                      setConfirmGate(null);
+                    }}
+                    disabled={submitting}
+                    className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-1.5 pr-2.5 text-xs text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-40 sm:gap-1.5 sm:py-1 sm:pl-3 sm:pr-2 sm:text-sm"
+                  >
+                    {/* スマホは × 左、PCは名前→×（order で入れ替え） */}
+                    <span
+                      className="shrink-0 text-zinc-500 sm:order-2"
+                      aria-hidden
+                    >
+                      ×
+                    </span>
+                    <span className="min-w-0 truncate sm:order-1">
+                      {pick.officialName}
+                    </span>
+                    <span className="sr-only">を外す</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <SearchResult
             state={search}
             picks={picks}
@@ -258,49 +367,72 @@ export function CardPickerDialog({
         </div>
 
         <footer className="shrink-0 space-y-3 border-t border-zinc-200 px-4 py-3">
-          {picks.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
-              {picks.map((pick) => (
-                <li key={pick.cardId}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPicks((prev) =>
-                        prev.filter((p) => p.cardId !== pick.cardId),
-                      )
-                    }
-                    disabled={submitting}
-                    className="flex items-center gap-1.5 rounded-full bg-zinc-100 py-1 pl-3 pr-2 text-sm text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-40"
-                  >
-                    {pick.officialName}
-                    <span className="text-zinc-500" aria-hidden>
-                      ×
-                    </span>
-                    <span className="sr-only">を外す</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {confirmGate === "zero" && picks.length === 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:text-sm">
+              <p>
+                カードが選択されていませんが、このまま続けますか？（該当するカードがある場合は全て選択してください。）
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmGate(null);
+                    focusSearchIfDesktop();
+                  }}
+                  disabled={submitting}
+                  className="font-medium underline underline-offset-2 disabled:opacity-40"
+                >
+                  戻って選ぶ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onConfirm([])}
+                  disabled={submitting}
+                  className="font-medium underline underline-offset-2 disabled:opacity-40"
+                >
+                  カードなしで進む
+                </button>
+              </div>
+            </div>
           )}
 
-          <div className="flex items-center justify-between gap-3">
+          {confirmGate === "one" && picks.length === 1 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:text-sm">
+              <p>他に関わるカードはありませんか？</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmGate(null);
+                    focusSearchIfDesktop();
+                  }}
+                  disabled={submitting}
+                  className="font-medium underline underline-offset-2 disabled:opacity-40"
+                >
+                  まだ選ぶ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onConfirm(picks)}
+                  disabled={submitting}
+                  className="font-medium underline underline-offset-2 disabled:opacity-40"
+                >
+                  この1枚で進む
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => onConfirm([])}
+              onClick={requestConfirm}
               disabled={submitting}
-              className="text-xs text-zinc-500 underline underline-offset-2 transition hover:text-zinc-700 disabled:opacity-40"
-            >
-              カードは関係ない質問です
-            </button>
-            <button
-              type="button"
-              onClick={() => onConfirm(picks)}
-              disabled={submitting || picks.length === 0}
               className="flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition disabled:opacity-40"
             >
               {picks.length > 0
                 ? `この${picks.length}枚で裁定する`
-                : "カードを選んでください"}
+                : "カードなしで進む"}
               <ArrowIcon />
             </button>
           </div>
@@ -331,7 +463,7 @@ function QuestionPreview({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           rows={4}
-          className="w-full resize-none bg-transparent px-1 text-sm leading-relaxed outline-none"
+          className="w-full resize-none bg-transparent px-1 text-base leading-relaxed outline-none"
         />
         <div className="flex justify-end">
           <button
@@ -377,7 +509,7 @@ function SearchResult({
   if (state.kind === "idle") {
     return (
       <p className="mt-6 text-center text-xs text-zinc-400">
-        カード名か略称を入れて検索してください
+        カード名を入力して検索してください
       </p>
     );
   }
@@ -472,6 +604,23 @@ function SearchResult({
         })}
       </ul>
     </div>
+  );
+}
+
+function BackChevronIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
   );
 }
 

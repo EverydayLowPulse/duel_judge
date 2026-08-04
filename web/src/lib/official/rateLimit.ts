@@ -1,5 +1,10 @@
-/** 公式サイトへの連続アクセス間隔（ミリ秒） */
-const MIN_INTERVAL_MS = 2000;
+/**
+ * 公式サイトへの連続アクセス間隔（ミリ秒）。
+ * 公式が 2 秒を要求しているわけではなく、負荷・悪用回避の自前下限。
+ * カード詳細はキャッシュヒット時はこのキューを通らない。
+ * ユーザー検索は /api/cards 経由の間接アクセスなので、直列＋数百msで十分。
+ */
+const MIN_INTERVAL_MS = 400;
 
 let lastRequestAt = 0;
 let chain: Promise<void> = Promise.resolve();

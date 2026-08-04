@@ -28,3 +28,21 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/*
+  iOS Safari / PWA: フォーカス時の自動ズームは入力の computed font-size < 16px で起き、
+  blur 後も戻らないことがある。タッチ端末ではテキスト入力を 16px 以上に固定する。
+  （ピンチズームは無効化しない。maximum-scale は使わない）
+*/
+@media (pointer: coarse) {
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not(
+      [type="checkbox"]
+    ):not([type="radio"]):not([type="range"]):not([type="file"]):not(
+      [type="image"]
+    ):not([type="color"]),
+  textarea,
+  select {
+    /* Tailwind の text-sm 等より優先（このバグだけは例外で !important） */
+    font-size: 16px !important;
+  }
+}

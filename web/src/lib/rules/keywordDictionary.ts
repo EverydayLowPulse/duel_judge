@@ -100,7 +100,7 @@ export const KEYWORD_RULE_DICTIONARY: KeywordRuleMapping[] = [
     key: "置換効果",
     label: "置換効果",
     // 「かわりに」単体は日常語と衝突しやすいので使わない
-    aliases: ["置換効果"],
+    aliases: ["置換効果", "かわりに"],
     ruleRefs: ["101.5", "101.5a", "101.5b", "110.2d"],
   },
   {

@@ -42,6 +42,9 @@ export function classifyIssues(input: {
   });
   if (pending) {
     const concept = getConceptById("pending_abilities");
+    const q = normalize(input.question);
+    const sealPending =
+      q.includes(normalize("封印")) || q.includes(normalize("無視"));
     matches.push({
       kind: "pending_abilities",
       label: pending.label,
@@ -49,6 +52,7 @@ export function classifyIssues(input: {
       seedQaIds: pending.seedQaIds,
       ruleRefs: concept?.ruleRefs ?? [],
       constraints: pending.constraints,
+      validatorId: sealPending ? "seal_pending_resolve" : undefined,
     });
   }
 
@@ -148,9 +152,11 @@ export function classifyIssues(input: {
         kind: "replacement_effect",
         label: concept.label,
         qaQueries: [
+          "置換効果 句点",
+          "置換効果 連鎖",
+          "かわりに その後",
           "置換ブレイク 手札",
           "シールド 離れる かわりに 墓地",
-          "置換効果 連鎖",
           "G城 ブレイク 墓地",
         ],
         seedQaIds: concept.qaSeeds,
@@ -240,38 +246,12 @@ function shouldCheckReplacementEffect(input: {
   facts: ScenarioFacts;
   cardTexts?: string[];
 }): boolean {
-  // カード能力文の「かわりに」は非常に多いので見ない。
-  // （ブレイク質問＋任意カードの置換テキストで 101.5 が誤注入されるのを防ぐ）
-  const q = normalize(input.question);
-
-  const mentionsBreak =
-    q.includes(normalize("ブレイク")) || q.includes(normalize("ぶれいく"));
-  const mentionsReplace =
-    q.includes(normalize("置換")) || q.includes(normalize("かわりに"));
-  const asksDest =
-    q.includes(normalize("手札")) ||
-    q.includes(normalize("墓地")) ||
-    q.includes(normalize("戻る")) ||
-    q.includes(normalize("置か"));
-
-  // 置換ブレイク × 行き先、または質問が置換ブレイク／G城系の行き先を問う
-  if (mentionsBreak && (mentionsReplace || asksDest)) {
-    if (
-      mentionsReplace ||
-      q.includes(normalize("シールドゾーンを離れる")) ||
-      q.includes(normalize("かわりに墓地")) ||
-      q.includes(normalize("G城")) ||
-      q.includes(normalize("セイント")) ||
-      q.includes(normalize("キャッスル"))
-    ) {
-      return true;
-    }
-  }
-
-  // 一般の「置換は連鎖するか」質問
+  // 汎用: 「かわりに」「置換」が出たら置換論点を開く（句点範囲・連鎖は制約側で扱う）
+  const hay = normalize(
+    [input.question, ...(input.cardTexts ?? [])].join("\n"),
+  );
   return (
-    q.includes(normalize("置換")) &&
-    (q.includes(normalize("連鎖")) || q.includes(normalize("かわりに")))
+    hay.includes(normalize("かわりに")) || hay.includes(normalize("置換"))
   );
 }
 

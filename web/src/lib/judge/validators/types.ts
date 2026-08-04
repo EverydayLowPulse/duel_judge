@@ -9,6 +9,8 @@ export type ValidatorInput = {
   facts: ScenarioFacts;
   issues: IssueClassification;
   chunks?: EvidenceChunk[];
+  /** 公式DB由来の能力テキスト（カード名分岐には使わずパターン検出のみ） */
+  cardAbilityTexts?: string[];
 };
 
 export type ValidatorResult = {
@@ -19,6 +21,12 @@ export type ValidatorResult = {
   missingFacts: string[];
   requiredRuleRefs: string[];
   constraintsForAnswer: string[];
+  /**
+   * あるときは LLM を介さずこの結論で AnswerPayload を組み立てる。
+   * allowed/not_allowed の二元では表せない裁定（誘発したが解決不発など）用。
+   */
+  craftedConclusion?: string;
+  craftedReasoning?: string;
 };
 
 export type AggregateValidatorResult = {

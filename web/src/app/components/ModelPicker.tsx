@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   DEFAULT_MODEL_ID,
   formatModelLabel,
@@ -29,30 +36,65 @@ type Props = {
   onChange: (modelId: string) => void;
 };
 
+type MenuPos = { bottom: number; right: number; maxHeight: number };
+
 /**
  * Cursor風の縦展開モデルピッカー。
  * 推奨を上にまとめ、コスト差はタグで示唆（クレジットは未実装）。
+ *
+ * スマホ注意:
+ * - 親の backdrop-blur 配下の absolute は iOS でクリップされやすい → fixed 配置
+ * - 外側閉じは pointerdown（touch 対応）。開いた直後の同一タップで閉じないよう遅延登録
  */
 export function ModelPicker({ value, disabled, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
   const selected = getCatalogModel(value) ?? getCatalogModel(DEFAULT_MODEL_ID)!;
   const recommended = listRecommendedModels();
   const others = listOtherModels();
 
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) {
+      setMenuPos(null);
+      return;
+    }
+    function place() {
+      const rect = buttonRef.current!.getBoundingClientRect();
+      const gap = 8;
+      const bottom = window.innerHeight - rect.top + gap;
+      const right = Math.max(8, window.innerWidth - rect.right);
+      // 画面上端までに収める
+      const maxHeight = Math.max(160, rect.top - gap - 8);
+      setMenuPos({ bottom, right, maxHeight });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    function onDoc(e: MouseEvent) {
+    function onDocPointerDown(e: PointerEvent) {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", onDoc);
+    // 開いたタップの pointerdown が残って即閉じするのを防ぐ
+    const timer = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onDocPointerDown);
+    }, 0);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
+      window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", onDocPointerDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -70,13 +112,14 @@ export function ModelPicker({ value, disabled, onChange }: Props) {
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex max-w-[min(100%,14rem)] items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-[11px] text-zinc-700 hover:bg-white disabled:opacity-50"
+        className="inline-flex min-h-9 max-w-[min(100%,14rem)] items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-left text-xs text-zinc-700 hover:bg-white disabled:opacity-50"
       >
         <span className="truncate font-medium">
           {formatModelLabel(selected)}
@@ -91,14 +134,19 @@ export function ModelPicker({ value, disabled, onChange }: Props) {
         </span>
       </button>
 
-      {open && (
+      {open && menuPos && (
         <div
           id={listId}
           role="listbox"
           aria-label="回答モデル"
-          className="absolute bottom-full right-0 z-40 mb-2 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg"
+          style={{
+            bottom: menuPos.bottom,
+            right: menuPos.right,
+            maxHeight: menuPos.maxHeight,
+          }}
+          className="fixed z-50 flex w-[min(18rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg"
         >
-          <div className="max-h-72 overflow-y-auto py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
             <SectionLabel>推奨</SectionLabel>
             {recommended.map((m) => (
               <ModelRow
@@ -122,7 +170,7 @@ export function ModelPicker({ value, disabled, onChange }: Props) {
               </>
             )}
           </div>
-          <p className="border-t border-zinc-100 px-3 py-2 text-[10px] leading-snug text-zinc-400">
+          <p className="shrink-0 border-t border-zinc-100 px-3 py-2 text-[10px] leading-snug text-zinc-400">
             クレジット課金は未実装。コスト差のあるモデルを増やすときに導入予定。
           </p>
         </div>
@@ -162,8 +210,8 @@ function ModelRow({
       onClick={() => onPick(model)}
       className={
         active
-          ? "flex w-full items-center gap-2 bg-zinc-100 px-3 py-2 text-left text-sm"
-          : "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50"
+          ? "flex min-h-11 w-full items-center gap-2 bg-zinc-100 px-3 py-2.5 text-left text-sm"
+          : "flex min-h-11 w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"
       }
     >
       <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">

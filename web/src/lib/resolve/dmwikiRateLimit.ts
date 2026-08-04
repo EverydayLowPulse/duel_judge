@@ -1,5 +1,8 @@
-/** dmwiki への連続アクセス間隔（ミリ秒） */
-const MIN_INTERVAL_MS = 1500;
+/**
+ * dmwiki への連続アクセス間隔（ミリ秒）。
+ * 公式キューとは別。補助検索用なので同様に数百msで足りる。
+ */
+const MIN_INTERVAL_MS = 400;
 
 let lastRequestAt = 0;
 let chain: Promise<void> = Promise.resolve();
