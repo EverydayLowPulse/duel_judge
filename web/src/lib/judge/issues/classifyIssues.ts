@@ -2,6 +2,10 @@ import { getConceptById } from "../../rules/ontology/concepts";
 import type { ScenarioFacts } from "../facts/types";
 import { matchPendingAbilityHints } from "../pendingAbilities";
 import { matchPerspectiveHints } from "../perspective";
+import {
+  isOrderRelevant,
+  matchResolutionOrderHints,
+} from "../resolutionOrder";
 import { shouldRunManaPayment } from "../validators/manaPayment";
 import type { IssueClassification, IssueMatch } from "./types";
 
@@ -53,6 +57,35 @@ export function classifyIssues(input: {
       ruleRefs: concept?.ruleRefs ?? [],
       constraints: pending.constraints,
       validatorId: sealPending ? "seal_pending_resolve" : undefined,
+    });
+  }
+
+  // 処理順フェーズ用。原則文は制約に積まず、ruleRefs / qaSeeds だけ検索へ流す。
+  const resolutionOrder = matchResolutionOrderHints({
+    question: input.question,
+    entities: input.entities,
+    cardTexts: input.cardTexts,
+  });
+  const orderRelevant = isOrderRelevant({
+    question: input.question,
+    entities: input.entities,
+    cardTexts: input.cardTexts,
+    pendingMatched: Boolean(pending),
+  });
+  if (orderRelevant) {
+    const concept = getConceptById("resolution_order");
+    const fromHint = resolutionOrder;
+    matches.push({
+      kind: "resolution_order",
+      label: fromHint?.label ?? concept?.label ?? "効果の処理順",
+      qaQueries: fromHint?.qaQueries ?? [
+        "効果 処理 順番",
+        "ターンプレイヤー 待機 解決",
+        "同時に誘発 解決順",
+      ],
+      seedQaIds: fromHint?.seedQaIds ?? concept?.qaSeeds ?? [],
+      ruleRefs: fromHint?.ruleRefs ?? concept?.ruleRefs ?? [],
+      constraints: [],
     });
   }
 
@@ -201,6 +234,7 @@ export function classifyIssues(input: {
     seedQaIds: unique(matches.flatMap((m) => m.seedQaIds)),
     ruleRefs: unique(matches.flatMap((m) => m.ruleRefs)),
     constraints: unique(matches.flatMap((m) => m.constraints)),
+    orderRelevant,
   };
 }
 

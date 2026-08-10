@@ -217,9 +217,9 @@ export function JudgeChat() {
       <header className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white/90 px-4 py-3 backdrop-blur">
         <div>
           <h1 className="text-[15px] font-semibold tracking-tight">
-            duel_judge
+            DM_judge
           </h1>
-          <p className="text-xs text-zinc-500">デュエマ裁定確認</p>
+          <p className="text-xs text-zinc-500">デュエマのルールにくわしいAI</p>
         </div>
       </header>
 
@@ -302,7 +302,9 @@ export function JudgeChat() {
               onKeyDown={onTextareaKeyDown}
               disabled={loading}
               rows={1}
-              placeholder="裁定したい状況を書いてください…"
+              placeholder={
+                "なんでも質問してください"
+              }
             />
             {/* 送信ボタンの代替。位置・色・矢印を保ち、次に確定ステップが来ることだけ示す */}
             <div className="flex justify-end">
@@ -340,11 +342,12 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
       <p className="text-2xl font-semibold tracking-tight text-zinc-800">
-        duel_judge
+        DM_judge
       </p>
       <p className="max-w-md text-sm leading-relaxed text-zinc-500">
-        デュエマの裁定を、公式カード・Q&A・総合ルールだけで確認します。
-        状況を書いたあと、関わるカードを選んで確定してから判定します。
+        デュエマのルールにくわしいAI。
+        <br />
+        公式ルールや公式Q&Aをもとに回答します。
       </p>
     </div>
   );

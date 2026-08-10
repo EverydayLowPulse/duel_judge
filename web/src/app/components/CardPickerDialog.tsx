@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { OfficialCard } from "@/lib/official/types";
 import type {
   ClarifyCandidate,
@@ -109,11 +109,17 @@ export function CardPickerDialog({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
+      if (e.key !== "Escape") return;
+      // 確認オーバーレイ中は外側ダイアログを閉じず、確認だけ取り消す
+      if (confirmGate) {
+        setConfirmGate(null);
+        return;
+      }
+      onCancel();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
+  }, [confirmGate, onCancel]);
 
   function focusSearchIfDesktop() {
     const finePointer =
@@ -223,7 +229,7 @@ export function CardPickerDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex h-dvh w-full flex-col bg-white sm:h-[85vh] sm:max-w-3xl sm:rounded-3xl sm:shadow-xl"
+        className="relative flex h-dvh w-full flex-col bg-white sm:h-[85vh] sm:max-w-3xl sm:rounded-3xl sm:shadow-xl"
       >
         <header className="flex shrink-0 items-start border-b border-zinc-200 px-3 py-3 sm:justify-between sm:gap-3 sm:px-5 sm:py-5">
           {/* スマホ: タイトル行に揃えた‹のみ。PC: 右上× */}
@@ -366,63 +372,7 @@ export function CardPickerDialog({
           />
         </div>
 
-        <footer className="shrink-0 space-y-3 border-t border-zinc-200 px-4 py-3">
-          {confirmGate === "zero" && picks.length === 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:text-sm">
-              <p>
-                カードが選択されていませんが、このまま続けますか？（該当するカードがある場合は全て選択してください。）
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmGate(null);
-                    focusSearchIfDesktop();
-                  }}
-                  disabled={submitting}
-                  className="font-medium underline underline-offset-2 disabled:opacity-40"
-                >
-                  戻って選ぶ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onConfirm([])}
-                  disabled={submitting}
-                  className="font-medium underline underline-offset-2 disabled:opacity-40"
-                >
-                  カードなしで進む
-                </button>
-              </div>
-            </div>
-          )}
-
-          {confirmGate === "one" && picks.length === 1 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:text-sm">
-              <p>他に関わるカードはありませんか？</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmGate(null);
-                    focusSearchIfDesktop();
-                  }}
-                  disabled={submitting}
-                  className="font-medium underline underline-offset-2 disabled:opacity-40"
-                >
-                  まだ選ぶ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onConfirm(picks)}
-                  disabled={submitting}
-                  className="font-medium underline underline-offset-2 disabled:opacity-40"
-                >
-                  この1枚で進む
-                </button>
-              </div>
-            </div>
-          )}
-
+        <footer className="shrink-0 border-t border-zinc-200 px-4 py-3">
           <div className="flex justify-end">
             <button
               type="button"
@@ -437,6 +387,121 @@ export function CardPickerDialog({
             </button>
           </div>
         </footer>
+
+        {/*
+          0枚/1枚の確認はフッター帯ではなく、ダイアログ内オーバーレイにする。
+          外側にもう1枚 fixed モーダルを積むのではなく、このパネル内で完結させる
+         （ネストした「ポップアップの上のポップアップ」感を避けつつ視線を中央に集める）。
+        */}
+        {confirmGate === "zero" && picks.length === 0 && (
+          <ConfirmGateOverlay
+            title="カードを選択せずに進みますか？"
+            body={
+              <>
+                質問に関連するカードがある場合はすべて選択してください。
+                <br />
+                特定のカードに関する質問でなければ、「カードなしで進む」を押してください。
+              </>
+            }
+            stayLabel="戻って選ぶ"
+            proceedLabel="カードなしで進む"
+            disabled={submitting}
+            onStay={() => {
+              setConfirmGate(null);
+              focusSearchIfDesktop();
+            }}
+            onProceed={() => onConfirm([])}
+          />
+        )}
+
+        {confirmGate === "one" && picks.length === 1 && (
+          <ConfirmGateOverlay
+            title="この1枚だけで進みますか？"
+            body={
+              <>
+                他に関連するカードがある場合はすべて選択してください。
+                <br />
+                この1枚だけなら、「この1枚で進む」を押してください。
+              </>
+            }
+            stayLabel="まだ選ぶ"
+            proceedLabel="この1枚で進む"
+            disabled={submitting}
+            onStay={() => {
+              setConfirmGate(null);
+              focusSearchIfDesktop();
+            }}
+            onProceed={() => onConfirm(picks)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ダイアログ内の確認レイヤ。
+ * absolute inset-0 で親（relative な dialog）だけを覆うので、
+ * 画面全体に第2モーダルを重ねるより軽く、スマホのフルスクリーンでも中央に浮く。
+ */
+function ConfirmGateOverlay({
+  title,
+  body,
+  stayLabel,
+  proceedLabel,
+  disabled,
+  onStay,
+  onProceed,
+}: {
+  title: string;
+  body: ReactNode;
+  stayLabel: string;
+  proceedLabel: string;
+  disabled: boolean;
+  onStay: () => void;
+  onProceed: () => void;
+}) {
+  const titleId = useId();
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-start justify-center bg-black/45 px-4 pb-4 pt-[18vh] sm:items-start sm:pt-[14vh]"
+      role="presentation"
+      onClick={(e) => {
+        // 暗い背景タップで「まだ選ぶ」相当（誤タップで確定しない）
+        if (e.target === e.currentTarget && !disabled) onStay();
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl sm:p-6"
+      >
+        <h3
+          id={titleId}
+          className="text-lg font-semibold tracking-tight text-zinc-900 sm:text-xl"
+        >
+          {title}
+        </h3>
+        <p className="mt-2 text-xs leading-relaxed text-zinc-600">{body}</p>
+        <div className="mt-5 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onProceed}
+            disabled={disabled}
+            className="rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-40"
+          >
+            {proceedLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onStay}
+            disabled={disabled}
+            className="rounded-full px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40"
+          >
+            {stayLabel}
+          </button>
+        </div>
       </div>
     </div>
   );

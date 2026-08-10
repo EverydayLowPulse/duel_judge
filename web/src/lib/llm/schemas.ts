@@ -84,3 +84,42 @@ export const scenarioVerificationModelSchema = z.object({
   timeline: z.array(z.string()).default([]),
   constraintsForAnswer: z.array(z.string()).default([]),
 });
+
+/** 処理順検証フェーズ（スコープ付き Observation） */
+export const resolutionOrderModelSchema = z.object({
+  needed: z.boolean(),
+  windowStart: z.object({
+    event: z.string(),
+    reason: z.string(),
+  }),
+  triggers: z
+    .array(
+      z.object({
+        controller: z.string(),
+        abilitySummary: z.string(),
+        triggerTiming: z.string(),
+        status: z.enum(["triggered", "did_not_trigger"]),
+      }),
+    )
+    .default([]),
+  resolutionQueue: z
+    .array(
+      z.object({
+        order: z.number(),
+        controller: z.string(),
+        abilitySummary: z.string(),
+        note: z.string(),
+      }),
+    )
+    .default([]),
+  resolutions: z
+    .array(
+      z.object({
+        effect: z.string(),
+        outcome: z.enum(["resolves", "fizzles", "unknown"]),
+        reason: z.string(),
+      }),
+    )
+    .default([]),
+  constraintsForAnswer: z.array(z.string()).default([]),
+});

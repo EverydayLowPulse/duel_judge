@@ -63,6 +63,28 @@ export const RULE_CONCEPTS: RuleConcept[] = [
     ],
   },
   {
+    id: "resolution_order",
+    label: "効果の処理順",
+    aliases: ["処理順", "解決順", "同時誘発", "ターンプレイヤー"],
+    structuralHints: [
+      "同時",
+      "順番",
+      "解決順",
+      "処理順",
+      "どっちが先",
+      "待機",
+      "ターンプレイヤー",
+    ],
+    // 101.4 / 101.4a: TP → 非TP。同プレイヤー間は任意
+    // 110.5a: 誘発後は発生源と独立
+    ruleRefs: ["101.4", "101.4a", "110.5a"],
+    qaSeeds: ["39355", "39067", "44824"],
+    requiredFacts: ["actions", "timelineNotes"],
+    // 原則全文は verify_resolution_order の system に置く（回答プロンプト肥大を避ける）
+    invariants: [],
+    commonFallacies: [],
+  },
+  {
     id: "perspective",
     label: "選択と視点（自分／相手）",
     aliases: ["自分", "相手", "強制選択", "タマシードを選ぶ"],

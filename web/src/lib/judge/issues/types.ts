@@ -2,6 +2,7 @@
 export type IssueKind =
   | "mana_payment"
   | "pending_abilities"
+  | "resolution_order"
   | "perspective"
   | "declaration_timing"
   | "replacement_effect"
@@ -31,4 +32,6 @@ export type IssueClassification = {
   seedQaIds: string[];
   ruleRefs: string[];
   constraints: string[];
+  /** 処理順検証フェーズ（verify_resolution_order）を起動するか */
+  orderRelevant: boolean;
 };

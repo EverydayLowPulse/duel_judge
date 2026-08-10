@@ -37,7 +37,7 @@
                                                           ↓
 回答＋引用 ← 出典検証 ← 裁定推論 ← 候補統合・再順位付け
                               ↑
-         決定的validators + 残余LLM検証（宣言条件・前提差分）
+         決定的validators + 処理順Observation（関係時のみ）+ 残余LLM検証（宣言条件・前提差分）
                                           ↑
                          複数のルール/Q&A検索 ← RuleConcept注入
                                           ↑
@@ -51,16 +51,18 @@
 段階ごとにツールを呼び出すエージェント構成とする（1回のプロンプトにすべて詰め込まない）。
 
 現状の推論は **ゲーム進行のフルシミュレーションではなく、論点駆動＋原則制約＋LLM** である。  
-ターンプレイヤー順でのステップ追跡は将来の別ブランチ実験候補（詳細は `docs/inference_approaches.md`）。
+処理順が論点のときだけ `verify_resolution_order` が、質問に関係する開始イベントから短い Observation を作る（原則全文は当該フェーズの system に閉じる）。  
+盤面状態機械（StepEngine）は将来の別ブランチ実験候補（詳細は `docs/inference_approaches.md`）。
 
 - `resolve_card_name()` — カード名解決（後述）
 - `fetch_card_from_official_db()` — 公式DBからカード能力を取得（検索POST→id特定→詳細GET）。ローカルキャッシュを先に確認し、ミスまたはTTL切れの場合のみ公式へ取得しに行く
 - `plan_search()` — 質問を固有名・イベント・汎用ルール概念に構造化し、Q&A用と総合ルール用の短い検索語を複数生成する。LLMの出力は検索補助にだけ使い、回答根拠にはしない
 - `resolve_scenario_cards()` — 質問中の複数カードを公式DBで解決し、カード種類・文明・パワー・コスト・種族・能力テキストを取得する。名前一致しない近似候補は採用しない
 - `build_scenario_facts()` — 質問で主張された事実を `ScenarioFacts` に落とす。カード属性は公式DBで上書きし、LLM推測は validator に渡さない
-- `classify_issues()` — 論点分類（マナ支払い・視点・待機能力など）。`RuleConcept` 解決と決定的 validator 起動の入口
+- `classify_issues()` — 論点分類（マナ支払い・視点・待機能力・処理順など）。`RuleConcept` 解決と決定的 validator 起動の入口。`orderRelevant` で処理順フェーズの要否を決める
 - `search_rules_and_qa()` — 検索プランの複数クエリを実行し、重複を統合・再順位付けする。公式Q&Aは `qa_w`、総合ルールはローカル索引を使う。ontology の `ruleRefs` / `qaSeeds` を強制注入する
 - `run_validators()` — 汎用ルールを純関数で判定（例: 多色マナ支払い）。`not_allowed` のときは LLM を介さず総合ルール引用付き回答を組み立て、Evidence Gate へ渡す
+- `verify_resolution_order()` — 処理順・同時誘発が論点のときだけ。開始イベントを動的に選び、誘発と解決の分離・101.4a の解決キュー観察を短い制約として後段へ渡す（原則全文は積み増ししない）
 - `verify_declaration_preconditions()` — 使用宣言時点のクリーチャーを固定し、各能力の文明・種族・コスト・パワー条件を公式カード情報と照合する。後の進化や効果解決で条件を満たしても、宣言時点へ遡って許可しない（決定的に解けない残余をLLMが担当）
 - `generate_answer()` — 論拠付き回答の生成（内部はJSON。詳細は `docs/answer_format.md`）
 

@@ -78,6 +78,8 @@ npx tsx scripts/smoke-mana-payment.ts
 npx tsx scripts/smoke-daishugo-mana.ts
 npx tsx scripts/smoke-card-resolve-bande.ts
 npx tsx scripts/smoke-pending-revolution.ts
+npx tsx scripts/smoke-pending-seal-battle.ts
+npx tsx scripts/smoke-resolution-order.ts
 ```
 
 ## MVPでやらないこと

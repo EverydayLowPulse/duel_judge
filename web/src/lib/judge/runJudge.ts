@@ -14,6 +14,11 @@ import {
   type ScenarioVerification,
 } from "../llm/scenarioVerifier";
 import {
+  formatResolutionOrderConstraints,
+  verifyResolutionOrderWithGemini,
+  type ResolutionOrderVerification,
+} from "../llm/resolutionOrderVerifier";
+import {
   beginLlmUsageCapture,
   endLlmUsageCapture,
   summarizeLlmUsage,
@@ -483,12 +488,23 @@ async function runJudgePipeline(
     }
   }
 
+  let resolutionOrderVerification: ResolutionOrderVerification | undefined;
   let scenarioVerification: ScenarioVerification | undefined;
   // 決定的に不可なら LLM 検証を省略して制約だけ渡す（コスト削減＋誤答抑止）
   if (
     deterministic.hardVerdict !== "not_allowed" &&
     scenarioCards.length > 0
   ) {
+    // 処理順は質問に関係するときだけ。原則全文は本フェーズ system に閉じ、後段には短い Observation のみ。
+    if (issues.orderRelevant) {
+      report("verify_resolution_order");
+      resolutionOrderVerification = await verifyResolutionOrderWithGemini({
+        question,
+        cards: scenarioCards,
+        chunks,
+        facts,
+      });
+    }
     report("verify_scenario");
     scenarioVerification = await verifyScenarioWithGemini({
       question,
@@ -511,6 +527,7 @@ async function runJudgePipeline(
     formatDeclarationPowerHints(facts.declarationPower ?? []),
     formatLeaveReplacementHints(facts.leaveReplacement ?? []),
     formatWrittenAbilityHints(facts.writtenAbilities ?? []),
+    formatResolutionOrderConstraints(resolutionOrderVerification),
     issues.constraints.length > 0
       ? `【論点制約（内部。evidenceには引用しない）】\n${issues.constraints
           .map((c) => `- ${c}`)
@@ -548,11 +565,7 @@ async function runJudgePipeline(
         "置換効果は原則として連鎖しない。置換ブレイクでシールドが離れる場合、通常ブレイク向けの『シールドゾーンを離れる時、かわりに墓地へ』は適用されず手札に加わる（qa/48504）。",
         "置換が句点（。）で区切られる文章の一部だけを変えたとき、その句点の範囲だけが置換済み。同じ能力の別句点は別イベントとして残り、一部置換＝能力全体が無効ではない（101.5a）。",
       ]),
-    ...issues.matches
-      .filter((m) => m.kind === "pending_abilities")
-      .flatMap(() => [
-        "いったん誘発した効果は発生源と独立して待機する（110.5a）。封印で無視されても『誘発しなかった』ではない。発生源にバトル等をさせる効果は解決時点でバトル不能なら不発、手札に戻す等は残る。",
-      ]),
+    // pending_abilities の長文原則は verify_resolution_order の Observation に寄せる（常時積み増ししない）
   ];
 
   report("generate_answer");

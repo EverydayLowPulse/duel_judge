@@ -18,7 +18,9 @@
   → classifyIssues / RuleConcept（論点検出・原則・qaSeeds・ruleRefs）
   → 公式Q&A・総合ルール検索（シード強制注入）
   → 決定的 validators（解けるものは LLM なし）
-  → 残余: scenarioVerifier + generateAnswer（LLM）
+  → （orderRelevant のときだけ）verify_resolution_order
+       ※開始イベントを動的選択。原則は当該 system のみ。後段へ短い Observation
+  → 残余: scenarioVerifier（宣言・視点・precedentDiffs）+ generateAnswer
   → Evidence Gate（引用必須・部分一致照合）
 ```
 
@@ -27,12 +29,21 @@
 | 層 | 役割 | 例 |
 |----|------|----|
 | Facts | 質問が主張する静的事実 | マナ帯、宣言時点パワー見積もり、入れ替え阻害 |
-| Issues / Concepts | 論点タグと不変条件 | `pending_abilities`, `replacement_effect` |
+| Issues / Concepts | 論点タグと不変条件 | `pending_abilities`, `resolution_order`, `replacement_effect` |
 | Validators | 純関数で可/不可 | 多色マナ支払い、入れ替え失敗 |
-| LLM 制約文 | 誤推論の禁止 | 「封印＝誘発しない」禁止、110.5a など |
+| 処理順 Observation | 関係区間だけの誘発/解決キュー | `windowStart` + 短い `constraintsForAnswer` |
+| LLM 制約文 | 誤推論の禁止 | Observation 結果、宣言条件など |
 | Evidence Gate | 出典の正当性 | チャンク外の捏造を拒否 |
 
-エントリは `web/src/lib/judge/runJudge.ts`。論点レジストリは `classifyIssues.ts`、概念束は `rules/ontology/concepts.ts`。
+エントリは `web/src/lib/judge/runJudge.ts`。論点レジストリは `classifyIssues.ts`、概念束は `rules/ontology/concepts.ts`。  
+処理順フェーズは `web/src/lib/llm/resolutionOrderVerifier.ts`。
+
+### master に入った処理順フェーズ（スコープ付き LLM Observation）
+
+- **フル状態機械ではない**。質問に関係する開始点から、誘発と解決・101.4a・最終情報を Observation するだけ
+- 原則全文を `generateAnswer` へ常時積み増ししない（プロンプト肥大を避ける）
+- 起動は安価な `orderRelevant` ゲート。無関係な質問では呼ばない
+- StepEngine（出す時＋同時誘発＋101.4a を決定的に回す）は **別ブランチ実験のまま**（下記）
 
 ### 長所
 
@@ -40,12 +51,13 @@
 - 公式テキスト＋Q&A を根拠にしやすい（Evidence Gate と相性が良い）
 - 論点ごとに smoke / eval を足して回帰しやすい
 - 解けないケースは withhold / confidence で逃げられる
+- 処理順原則を専用フェーズに閉じられる
 
 ### 短所（時系列クラスの誤答が繰り返し出る）
 
-- **時系列を1本の状態機械として持たない**ため、「誘発したか」と「解決時に行動できるか」を混同しやすい
-- ターンプレイヤー / 非ターンプレイヤーの解決順（総合ルール 101.4 / 101.4a など）を、手順として実行していない
-- 対策が「原則テキスト／狭い validator」に寄り、漏れが出ると同型ミスが再発する
+- **時系列を1本の状態機械として持たない**ため、Observation が浅いと「誘発したか」と「解決時に行動できるか」をなお混同しうる
+- ターンプレイヤー / 非ターンプレイヤーの解決順（総合ルール 101.4 / 101.4a など）を、**決定的手順として実行してはいない**（LLM Observation）
+- 対策が「原則テキスト／狭い validator／スコープ付き Observation」に寄り、漏れが出ると同型ミスが再発する
 - 同時誘発・割り込み・置換の連鎖を、網羅的にではなく「よくある誤読」単位で塞いでいる
 
 #### 実害ログ（同じ根因）
@@ -120,8 +132,8 @@ ScenarioFacts
 
 ### 現状への影響
 
-- master では論点駆動＋既知地雷の応急手当を継続する（完全解ではない）
-- 時系列クラスの誤答が続くなら、別ブランチ `experiment/step-engine` で **出す時＋同時誘発＋101.4a だけ**をスパイクする価値が高い
+- master では論点駆動＋既知地雷の応急手当＋**スコープ付き処理順 Observation** を継続する（完全解ではない）
+- Observation でも時系列クラスの誤答が残るなら、別ブランチ `experiment/step-engine` で **出す時＋同時誘発＋101.4a だけ**をスパイクする価値が高い
 - フルルールエンジン化や「validator の無限増殖」は採用しない
 - 本ファイルは方針メモ。スパイク着手は明示的に決めてから
 
@@ -140,6 +152,9 @@ ScenarioFacts
 
 - 処理フロー概要: `docs/project.md`「処理フロー」
 - 待機・封印の原則: `web/src/lib/rules/ontology/concepts.ts`（`pending_abilities`）
+- 処理順 concept: `resolution_order`（原則全文は verifier system 側）
+- 処理順 Observation: `web/src/lib/llm/resolutionOrderVerifier.ts`
+- 起動ゲート: `web/src/lib/judge/resolutionOrder.ts`
 - 応急の封印×待機短絡（完全解ではない）: `web/src/lib/judge/validators/sealPendingResolve.ts`
-- 回帰: `web/scripts/smoke-pending-seal-battle.ts`
+- 回帰: `web/scripts/smoke-pending-seal-battle.ts` / `web/scripts/smoke-resolution-order.ts`
 - 効果処理順の参照: 総合ルール 101.4 / 101.4a、誘発の独立性 110.5a、封印 116.2 / 116.2a
