@@ -1,9 +1,9 @@
-/**
+﻿/**
  * 回帰: 革命チェンジ後に「出た時→攻撃時」の順で解決できるか。
  * 誤答パターン「場を離れたから攻撃時は使えない」を防ぐ。
  */
-import { runJudge } from "../src/lib/judge/runJudge";
-import { matchPendingAbilityHints } from "../src/lib/judge/pendingAbilities";
+import { runJudge } from "../../src/lib/judge/runJudge";
+import { matchPendingAbilityHints } from "../../src/lib/judge/pendingAbilities";
 
 async function main() {
   const question =

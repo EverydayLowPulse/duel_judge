@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { generateJson, getLlmProvider } from "../src/lib/llm/generateJson";
-import { runJudge } from "../src/lib/judge/runJudge";
+﻿import { z } from "zod";
+import { generateJson, getLlmProvider } from "../../src/lib/llm/generateJson";
+import { runJudge } from "../../src/lib/judge/runJudge";
 
 async function smoke() {
   console.log("provider=", getLlmProvider());

@@ -1,19 +1,19 @@
-/**
+﻿/**
  * 回帰: 処理順フェーズの起動ゲート。
  * - 解決順・同時誘発が論点なら orderRelevant / resolution_order
  * - 無関係なマナ支払いだけではスキップ
  * - 封印×メタは pending 経由でも orderRelevant
  * LLM は呼ばない（検出のみ）。
  */
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 import {
   formatResolutionOrderConstraints,
   type ResolutionOrderVerification,
-} from "../src/lib/llm/resolutionOrderVerifier";
+} from "../../src/lib/llm/resolutionOrderVerifier";
 import {
   isOrderRelevant,
   matchResolutionOrderHints,
-} from "../src/lib/judge/resolutionOrder";
+} from "../../src/lib/judge/resolutionOrder";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

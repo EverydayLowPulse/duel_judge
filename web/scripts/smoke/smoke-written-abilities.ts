@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 回帰: 注釈文のみのクリーチャーは「能力が書かれていない」扱い。
  * カード固有の if ではなく、注釈除去＋監視能力検出の原則を確認する。
  */
@@ -6,8 +6,8 @@ import {
   hasWrittenAbilities,
   stripReminderText,
   watchesNoWrittenAbilities,
-} from "../src/lib/judge/facts/writtenAbilities";
-import { runJudge } from "../src/lib/judge/runJudge";
+} from "../../src/lib/judge/facts/writtenAbilities";
+import { runJudge } from "../../src/lib/judge/runJudge";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

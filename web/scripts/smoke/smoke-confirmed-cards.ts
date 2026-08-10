@@ -1,14 +1,14 @@
-/**
+﻿/**
  * 回帰: 送信前にユーザーが確定したカードは、公式検索なしでシナリオに載ること。
  *
  * - 読み仮名・ひらがな表記は正式名と文字列一致しないので、名前照合を要求しない
  * - マナのマーカーが無い質問で、文の断片をカード名として引かない
  * - 確定モードでは文章からカードを足さない
  */
-import { buildEnrichedScenarioFacts } from "../src/lib/judge/facts/enrichManaCards";
-import { buildConfirmedScenarioCards } from "../src/lib/judge/scenarioCards";
-import type { SearchPlan } from "../src/lib/llm/searchPlanner";
-import type { OfficialCard } from "../src/lib/official/types";
+import { buildEnrichedScenarioFacts } from "../../src/lib/judge/facts/enrichManaCards";
+import { buildConfirmedScenarioCards } from "../../src/lib/judge/scenarioCards";
+import type { SearchPlan } from "../../src/lib/llm/searchPlanner";
+import type { OfficialCard } from "../../src/lib/official/types";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

@@ -1,12 +1,12 @@
-/**
+﻿/**
  * 回帰: 置換論点（かわりに／置換）と汎用原則（連鎖しない・句点範囲 101.5a）。
  */
-import type { ScenarioFacts } from "../src/lib/judge/facts/types";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
+import type { ScenarioFacts } from "../../src/lib/judge/facts/types";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 import {
   shouldRunReplacementBreakHand,
   validateReplacementBreakHand,
-} from "../src/lib/judge/validators/replacementBreakHand";
+} from "../../src/lib/judge/validators/replacementBreakHand";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

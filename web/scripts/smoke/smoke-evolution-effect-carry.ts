@@ -1,14 +1,14 @@
-/**
+﻿/**
  * 回帰: ジャストダイバー等の「進化で効果が残るか」で
  * 総合ルール 801.2 が根拠に入り、推論が Q&A言い換えだけで終わらないこと。
  */
-import { enrichPrincipleEvidence } from "../src/lib/answer/enrichPrincipleEvidence";
-import type { AnswerPayload, EvidenceChunk } from "../src/lib/answer/types";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
-import { runJudge } from "../src/lib/judge/runJudge";
-import { RULE_PDF_URL } from "../src/lib/rules/constants";
-import { lookupRuleChunksByRefs } from "../src/lib/rules/lookupByRefs";
-import type { RuleSearchHit } from "../src/lib/rules/types";
+import { enrichPrincipleEvidence } from "../../src/lib/answer/enrichPrincipleEvidence";
+import type { AnswerPayload, EvidenceChunk } from "../../src/lib/answer/types";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
+import { runJudge } from "../../src/lib/judge/runJudge";
+import { RULE_PDF_URL } from "../../src/lib/rules/constants";
+import { lookupRuleChunksByRefs } from "../../src/lib/rules/lookupByRefs";
+import type { RuleSearchHit } from "../../src/lib/rules/types";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

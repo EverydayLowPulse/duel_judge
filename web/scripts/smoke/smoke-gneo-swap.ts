@@ -1,12 +1,12 @@
-/**
+﻿/**
  * 回帰: G-NEO進化中のダーバンデへの革命チェンジ入れ替えは不可。
  */
-import { buildLeaveReplacementHints } from "../src/lib/judge/facts/leaveReplacement";
-import { buildScenarioFacts } from "../src/lib/judge/facts/buildScenarioFacts";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
-import { runValidators } from "../src/lib/judge/validators/runValidators";
-import type { SearchPlan } from "../src/lib/llm/searchPlanner";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+import { buildLeaveReplacementHints } from "../../src/lib/judge/facts/leaveReplacement";
+import { buildScenarioFacts } from "../../src/lib/judge/facts/buildScenarioFacts";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
+import { runValidators } from "../../src/lib/judge/validators/runValidators";
+import type { SearchPlan } from "../../src/lib/llm/searchPlanner";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

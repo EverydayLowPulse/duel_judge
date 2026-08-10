@@ -1,5 +1,5 @@
-import { ensureRuleIndex } from "../src/lib/rules/ensureIndex";
-import { searchRuleChunks } from "../src/lib/rules/search";
+﻿import { ensureRuleIndex } from "../../src/lib/rules/ensureIndex";
+import { searchRuleChunks } from "../../src/lib/rules/search";
 
 async function main() {
   const index = await ensureRuleIndex();

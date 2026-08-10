@@ -1,8 +1,8 @@
-/**
+﻿/**
  * 回帰: 読み仮名「ドラッヘダーバンデ」とノイズ付きクエリでカード解決できること。
  */
-import { cleanCardQuery } from "../src/lib/resolve/cleanCardQuery";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+import { cleanCardQuery } from "../../src/lib/resolve/cleanCardQuery";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

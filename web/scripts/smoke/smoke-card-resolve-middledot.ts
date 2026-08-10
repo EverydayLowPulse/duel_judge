@@ -1,12 +1,12 @@
-/**
+﻿/**
  * 回帰: 中黒なしのカード名でも公式検索経由で解決できること。
  * （公式DBは中黒敏感で、接頭辞検索だけでは古いカードが上位に出ない）
  */
 import {
   buildOfficialSearchVariants,
   middleDotSearchVariants,
-} from "../src/lib/resolve/nameMatch";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+} from "../../src/lib/resolve/nameMatch";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

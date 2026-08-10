@@ -40,7 +40,7 @@ type MenuPos = { bottom: number; right: number; maxHeight: number };
 
 /**
  * Cursor風の縦展開モデルピッカー。
- * 推奨を上にまとめ、コスト差はタグで示唆（クレジットは未実装）。
+ * 推奨を上にまとめ、Flash / Pro などのタグで差を示す。
  *
  * スマホ注意:
  * - 親の backdrop-blur 配下の absolute は iOS でクリップされやすい → fixed 配置
@@ -170,9 +170,6 @@ export function ModelPicker({ value, disabled, onChange }: Props) {
               </>
             )}
           </div>
-          <p className="shrink-0 border-t border-zinc-100 px-3 py-2 text-[10px] leading-snug text-zinc-400">
-            クレジット課金は未実装。コスト差のあるモデルを増やすときに導入予定。
-          </p>
         </div>
       )}
     </div>
@@ -196,12 +193,6 @@ function ModelRow({
   active: boolean;
   onPick: (m: CatalogModel) => void;
 }) {
-  const costHint =
-    model.costTier === "low"
-      ? "低コスト"
-      : model.costTier === "mid"
-        ? "中"
-        : "高";
   return (
     <button
       type="button"
@@ -225,7 +216,6 @@ function ModelRow({
           推奨
         </span>
       )}
-      <span className="shrink-0 text-[10px] text-zinc-400">{costHint}</span>
       {active && (
         <span className="shrink-0 text-zinc-700" aria-hidden>
           ✓

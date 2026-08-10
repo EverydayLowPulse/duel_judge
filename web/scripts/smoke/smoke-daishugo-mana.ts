@@ -1,8 +1,8 @@
-/**
+﻿/**
  * 回帰: 大集合はマナに光/水/自然があれば無色2で召喚可能。
  * （通常の多色支払いだけ見て「不可能」にしない）
  */
-import { runJudge } from "../src/lib/judge/runJudge";
+import { runJudge } from "../../src/lib/judge/runJudge";
 
 async function main() {
   const question =

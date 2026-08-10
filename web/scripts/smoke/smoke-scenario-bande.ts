@@ -1,10 +1,10 @@
-/**
+﻿/**
  * 回帰: 読み仮名「ダーバンデ」がシナリオ解決で正式名カードに紐づくこと。
  * （略称辞書で resolved しても nameMatches で捨てていた不具合の防止）
  */
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
-import { resolveScenarioCards } from "../src/lib/judge/scenarioCards";
-import type { SearchPlan } from "../src/lib/llm/searchPlanner";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
+import { resolveScenarioCards } from "../../src/lib/judge/scenarioCards";
+import type { SearchPlan } from "../../src/lib/llm/searchPlanner";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

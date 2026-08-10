@@ -486,10 +486,7 @@ function AssistantBubble({
           <p className="text-zinc-600">{result.withhold.next_hint}</p>
         )}
         <ReopenPickerButton loading={loading} onPickCards={onPickCards} />
-        <FooterMeta
-          disclaimer={result.display.disclaimer}
-          llm={result.debug?.llm}
-        />
+        <FooterMeta disclaimer={result.display.disclaimer} />
       </section>
     );
   }
@@ -606,16 +603,7 @@ function AnswerMessage({
           <p className="text-xs text-zinc-500">
             確信度: {confidenceLabel} — {a.confidence_note}
           </p>
-          {result.debug?.gateAdjustments &&
-            result.debug.gateAdjustments.length > 0 && (
-              <p className="text-xs text-zinc-400">
-                ※ 確信度は出典種別に合わせて自動調整しています
-              </p>
-            )}
-          <FooterMeta
-            disclaimer={result.display.disclaimer}
-            llm={result.debug?.llm}
-          />
+          <FooterMeta disclaimer={result.display.disclaimer} />
         </div>
       )}
     </article>
@@ -746,16 +734,9 @@ function CheckIcon() {
   );
 }
 
-function FooterMeta({
-  disclaimer,
-  llm,
-}: {
-  disclaimer: string;
-  llm?: string;
-}) {
+function FooterMeta({ disclaimer }: { disclaimer: string }) {
   return (
     <div className="space-y-0.5 pt-1 text-xs text-zinc-400">
-      {llm && <p>モデル: {llm}</p>}
       <p>{disclaimer}</p>
     </div>
   );

@@ -1,11 +1,7 @@
 /**
  * UI／API で選ぶ LLM モデルのカタログ。
- * クレジット課金は未実装（costTier だけ先に持っておく）。
- *
- * 推奨候補（キー未整備のため未掲載）: Grok 4.5 / Kimi K3 / Opus 5
+ * 推奨グループを上位表示し、Flash / Pro などのタグで差を示す。
  */
-export type LlmCostTier = "low" | "mid" | "high";
-
 export type CatalogModel = {
   /** API に渡す model 文字列 */
   id: string;
@@ -16,8 +12,6 @@ export type CatalogModel = {
   tag?: string;
   /** 推奨グループに出す */
   recommended: boolean;
-  /** 将来のクレジット計算用 */
-  costTier: LlmCostTier;
   enabled: boolean;
 };
 
@@ -29,7 +23,6 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     label: "DeepSeek V4",
     tag: "Pro",
     recommended: true,
-    costTier: "mid",
     enabled: true,
   },
   {
@@ -39,7 +32,6 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     label: "DeepSeek V4",
     tag: "Flash",
     recommended: true,
-    costTier: "low",
     enabled: true,
   },
   {
@@ -48,7 +40,6 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     label: "Gemini 3.6",
     tag: "Flash",
     recommended: false,
-    costTier: "mid",
     enabled: true,
   },
   {
@@ -57,7 +48,6 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     label: "Gemini 3.5",
     tag: "Flash-Lite",
     recommended: false,
-    costTier: "low",
     enabled: true,
   },
   {
@@ -66,7 +56,6 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     label: "Gemini 3.1",
     tag: "Pro",
     recommended: false,
-    costTier: "high",
     enabled: true,
   },
 ];

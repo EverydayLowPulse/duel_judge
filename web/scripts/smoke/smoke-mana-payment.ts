@@ -1,14 +1,14 @@
-/**
+﻿/**
  * 回帰: マナにアンティハムト+5000VT×2 でアンティハムト召喚は不可能。
  */
-import { buildEnrichedScenarioFacts } from "../src/lib/judge/facts/enrichManaCards";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
-import { runJudge } from "../src/lib/judge/runJudge";
-import { resolveScenarioCards } from "../src/lib/judge/scenarioCards";
-import { checkManaPayment } from "../src/lib/judge/validators/manaPayment";
-import { runValidators } from "../src/lib/judge/validators/runValidators";
-import { planSearchWithGemini } from "../src/lib/llm/searchPlanner";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+import { buildEnrichedScenarioFacts } from "../../src/lib/judge/facts/enrichManaCards";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
+import { runJudge } from "../../src/lib/judge/runJudge";
+import { resolveScenarioCards } from "../../src/lib/judge/scenarioCards";
+import { checkManaPayment } from "../../src/lib/judge/validators/manaPayment";
+import { runValidators } from "../../src/lib/judge/validators/runValidators";
+import { planSearchWithGemini } from "../../src/lib/llm/searchPlanner";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 async function main() {
   const question =

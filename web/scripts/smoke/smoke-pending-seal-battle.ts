@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 回帰: 封印後のメタは「誘発しない」ではない。
  * - 出た時点で誘発し待機する（110.5a）
  * - 発生源にバトルさせる効果は、封印で無視されるとバトル不能で不発
@@ -6,17 +6,17 @@
  * - LLM を介さず決定的 validator が結論を組み立てる
  * 具体カード名は smoke のみ（検出・結論分岐には載せない）。
  */
-import type { EvidenceChunk } from "../src/lib/answer/types";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
-import { matchPendingAbilityHints } from "../src/lib/judge/pendingAbilities";
-import { buildDeterministicAnswer } from "../src/lib/judge/validators/buildDeterministicAnswer";
+import type { EvidenceChunk } from "../../src/lib/answer/types";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
+import { matchPendingAbilityHints } from "../../src/lib/judge/pendingAbilities";
+import { buildDeterministicAnswer } from "../../src/lib/judge/validators/buildDeterministicAnswer";
 import {
   detectSealPendingEffectKind,
   shouldRunSealPendingResolve,
   validateSealPendingResolve,
-} from "../src/lib/judge/validators/sealPendingResolve";
-import { RULE_PDF_URL } from "../src/lib/rules/constants";
-import { matchKeywordRules } from "../src/lib/rules/keywordDictionary";
+} from "../../src/lib/judge/validators/sealPendingResolve";
+import { RULE_PDF_URL } from "../../src/lib/rules/constants";
+import { matchKeywordRules } from "../../src/lib/rules/keywordDictionary";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

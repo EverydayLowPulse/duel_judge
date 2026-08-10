@@ -1,9 +1,10 @@
-# 裁定推論アプローチ（現状と実験候補）
+# 裁定推論アプローチ（研究メモ / ADR）
+
+> **位置づけ**: 研究メモ・ADR です。現行の製品パイプラインの正本は `docs/project.md` です。  
+> ここに書くステップ駆動（StepEngine）などは **採用済みの実装ではなく**、将来実験の候補と失敗ログです。
 
 裁定の正しさは「ルール知識の有無」だけでなく、**いつ・誰の効果が・どの順で・どの状態で解決されるか**の追跡に依存する。  
 本書は現行パイプラインの実態と、将来試したいステップ駆動アプローチを記録する。
-
-実装の正本フローは `docs/project.md`。ここは推論方式の設計メモ。
 
 ---
 
@@ -156,5 +157,5 @@ ScenarioFacts
 - 処理順 Observation: `web/src/lib/llm/resolutionOrderVerifier.ts`
 - 起動ゲート: `web/src/lib/judge/resolutionOrder.ts`
 - 応急の封印×待機短絡（完全解ではない）: `web/src/lib/judge/validators/sealPendingResolve.ts`
-- 回帰: `web/scripts/smoke-pending-seal-battle.ts` / `web/scripts/smoke-resolution-order.ts`
+- 回帰: `web/scripts/smoke/smoke-pending-seal-battle.ts` / `web/scripts/smoke/smoke-resolution-order.ts`
 - 効果処理順の参照: 総合ルール 101.4 / 101.4a、誘発の独立性 110.5a、封印 116.2 / 116.2a

@@ -44,14 +44,13 @@ npx vercel --prod
 - カード名解決: `GET /api/cards?q=レッドゾーン`（確定は `POST` で `cardId`）
   - 公式0件時は dmwiki 検索で正式名候補 → 公式DB再突合（`CARD_RESOLVE_WEB=auto|on|off`）。論拠には使わない
   - 任意: `DEEPSEEK_API_KEY` があれば検索語整形のみ（Gemini grounding は使わない）
-- Q&A検索: `GET /api/qa?q=レッドゾーン&details=2`
 - 裁定: `POST /api/judge` `{ question, confirmedCards?, cardQuery?, cardId?, stream? }`
   - `confirmedCards`: `[{ cardId, mention? }]`。送信前確定モード（`[]` は「カードなし」の明示）。指定時はカード名解決を行わない。`mention` は略称辞書へ学習させる
   - `cardQuery` / `cardId` は後方互換（スモーク・スクリプト用の推定モード）
   - 既定: JSON 一発（スモーク・スクリプト向け）
   - `stream: true` または `Accept: text/event-stream`: SSE（`progress` → `result`）。進捗は段階イベント（回答トークンではない）。`progress.kind` は `status` / `monologue`（出典検証で弾れたあとの見直し独り言）。UI回答は「結論（太字）→推論→根拠一覧」を1枠で表示
   - SSE は約8秒ごとに keepalive（コメント行）。携帯回線の無通信切断を抑止。Vercel Hobby は関数上限約60秒
-- 総合ルール: `GET /api/rules?q=召喚酔い`（初回は公式PDF取得→チャンク索引。再構築は `POST` `{ rebuild: true }`）
+- Q&A・総合ルール検索は裁定パイプライン内の `lib/official` / `lib/rules` 経由（公開 HTTP API は置かない）
 - キーワード辞書: `web/src/lib/rules/keywordDictionary.ts`（能力名→ルール節の決定的注入）
 - ルールオントロジー: `web/src/lib/rules/ontology/`（論点→ruleRefs / qaSeeds / validator）
 - 事実モデル: `web/src/lib/judge/facts/`（`ScenarioFacts`。カード属性は公式DBで上書き）
@@ -62,24 +61,23 @@ npx vercel --prod
   - いま選べる: `deepseek-v4-pro` / `deepseek-v4-flash` / `gemini-3.6-flash` / `gemini-3.5-flash-lite` / `gemini-3.1-pro`
   - DeepSeek Flash は 2026-07-31 正式版（裏バージョン `DeepSeek-V4-Flash-0731`）。API ID は `deepseek-v4-flash` のまま。Pro 正式版は未公開
   - サーバ既定: `LLM_PROVIDER` + `DEEPSEEK_MODEL` / `GEMINI_MODEL`（`model` 未指定時）
-  - クレジット課金は未実装（コスト差のあるモデル追加時に導入予定）
   - `provider=auto|gemini|deepseek` は後方互換
   - Gemini: `GEMINI_API_KEY` / DeepSeek: `DEEPSEEK_API_KEY`
 
   - 設定例は `web/.env.example`
 
-### 回帰スモーク（例）
+### 回帰スモーク（例・開発者向け）
 
 ```bash
 cd web
 npx tsx scripts/test-mana-payment-validator.ts
-npx tsx scripts/smoke-confirmed-cards.ts
-npx tsx scripts/smoke-mana-payment.ts
-npx tsx scripts/smoke-daishugo-mana.ts
-npx tsx scripts/smoke-card-resolve-bande.ts
-npx tsx scripts/smoke-pending-revolution.ts
-npx tsx scripts/smoke-pending-seal-battle.ts
-npx tsx scripts/smoke-resolution-order.ts
+npx tsx scripts/smoke/smoke-confirmed-cards.ts
+npx tsx scripts/smoke/smoke-mana-payment.ts
+npx tsx scripts/smoke/smoke-daishugo-mana.ts
+npx tsx scripts/smoke/smoke-card-resolve-bande.ts
+npx tsx scripts/smoke/smoke-pending-revolution.ts
+npx tsx scripts/smoke/smoke-pending-seal-battle.ts
+npx tsx scripts/smoke/smoke-resolution-order.ts
 ```
 
 ## MVPでやらないこと
@@ -101,8 +99,7 @@ npx tsx scripts/smoke-resolution-order.ts
 
 ## 認証・課金
 
-- MVP（自分用・非公開）: 省略可
-- 公開時: Web決済等を別途検討（ストア内課金に縛られない）
+- ポートフォリオ／デモ用途では認証・課金は未実装（ローカルまたは限定公開を想定）
 
 ## 参照
 

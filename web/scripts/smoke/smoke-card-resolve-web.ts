@@ -1,8 +1,8 @@
-/**
+﻿/**
  * dmwiki 検索 HTML パースと、wiki→公式の配線スモーク。
  */
-import { parseDmwikiSearchHtml } from "../src/lib/resolve/dmwikiSearch";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+import { parseDmwikiSearchHtml } from "../../src/lib/resolve/dmwikiSearch";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

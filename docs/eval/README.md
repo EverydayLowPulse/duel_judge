@@ -38,5 +38,5 @@ npx tsx scripts/run-eval.ts --full --id=replacement-break-saint-castle-001
 ## 足し方
 
 1. 誤答・あやしい回答が出たら `docs/eval/<id>.json` を1件追加
-2. 可能なら対応する `web/scripts/smoke-*.ts` も足す（論点 seed など決定的部分）
+2. 可能なら対応する `web/scripts/smoke/smoke-*.ts` も足す（論点 seed など決定的部分）
 3. たまに `--full` で通し、落ちたものを直す

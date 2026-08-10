@@ -19,9 +19,6 @@
   "functions": {
     "src/app/api/judge/route.ts": {
       "maxDuration": 60
-    },
-    "src/app/api/rules/route.ts": {
-      "maxDuration": 60
     }
   }
 }

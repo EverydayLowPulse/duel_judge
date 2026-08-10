@@ -1,15 +1,15 @@
-import { runEvidenceGate } from "../src/lib/answer/evidenceGate";
-import { generateAnswerWithGemini } from "../src/lib/llm/gemini";
-import { planSearchWithGemini } from "../src/lib/llm/searchPlanner";
-import { verifyScenarioWithGemini } from "../src/lib/llm/scenarioVerifier";
+﻿import { runEvidenceGate } from "../../src/lib/answer/evidenceGate";
+import { generateAnswerWithGemini } from "../../src/lib/llm/gemini";
+import { planSearchWithGemini } from "../../src/lib/llm/searchPlanner";
+import { verifyScenarioWithGemini } from "../../src/lib/llm/scenarioVerifier";
 import {
   formatPerspectiveConstraints,
   matchPerspectiveHints,
-} from "../src/lib/judge/perspective";
-import { retrieveOfficialSources } from "../src/lib/judge/retrieveSources";
-import { resolveScenarioCards } from "../src/lib/judge/scenarioCards";
-import { RULE_PDF_URL } from "../src/lib/rules/constants";
-import type { EvidenceChunk } from "../src/lib/answer/types";
+} from "../../src/lib/judge/perspective";
+import { retrieveOfficialSources } from "../../src/lib/judge/retrieveSources";
+import { resolveScenarioCards } from "../../src/lib/judge/scenarioCards";
+import { RULE_PDF_URL } from "../../src/lib/rules/constants";
+import type { EvidenceChunk } from "../../src/lib/answer/types";
 
 async function main() {
   const question =

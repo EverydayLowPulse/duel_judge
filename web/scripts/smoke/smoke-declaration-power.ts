@@ -1,10 +1,10 @@
-/**
+﻿/**
  * 回帰: アンティハムトから出したダーバンデは、攻撃開始時点で +3000 を含める。
  */
-import { buildDeclarationPowerHints } from "../src/lib/judge/facts/declarationPower";
-import { buildScenarioFacts } from "../src/lib/judge/facts/buildScenarioFacts";
-import type { SearchPlan } from "../src/lib/llm/searchPlanner";
-import { resolveCardName } from "../src/lib/resolve/resolveCardName";
+import { buildDeclarationPowerHints } from "../../src/lib/judge/facts/declarationPower";
+import { buildScenarioFacts } from "../../src/lib/judge/facts/buildScenarioFacts";
+import type { SearchPlan } from "../../src/lib/llm/searchPlanner";
+import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

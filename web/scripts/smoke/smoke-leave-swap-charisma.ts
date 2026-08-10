@@ -1,16 +1,16 @@
-/**
+﻿/**
  * 回帰: 「破壊される時、かわりにマナゾーンに置く」は入れ替え阻害ではない。
  * 侵略だけの質問では swap_effect 論点を立てない。
  */
-import { buildLeaveReplacementHints } from "../src/lib/judge/facts/leaveReplacement";
-import type { ScenarioFacts } from "../src/lib/judge/facts/types";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
-import type { ScenarioCard } from "../src/lib/judge/scenarioCards";
-import type { OfficialCard } from "../src/lib/official/types";
+import { buildLeaveReplacementHints } from "../../src/lib/judge/facts/leaveReplacement";
+import type { ScenarioFacts } from "../../src/lib/judge/facts/types";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
+import type { ScenarioCard } from "../../src/lib/judge/scenarioCards";
+import type { OfficialCard } from "../../src/lib/official/types";
 import {
   shouldRunDestroyManaNotSwapBlocker,
   validateDestroyManaNotSwapBlocker,
-} from "../src/lib/judge/validators/destroyManaNotSwapBlocker";
+} from "../../src/lib/judge/validators/destroyManaNotSwapBlocker";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

@@ -1,10 +1,10 @@
-/**
+﻿/**
  * 回帰: 言い換えた quote をチャンク原文へ寄せて Evidence Gate を通す。
  */
-import { runEvidenceGate } from "../src/lib/answer/evidenceGate";
-import { repairEvidenceQuotes } from "../src/lib/answer/repairEvidenceQuotes";
-import type { AnswerPayload, EvidenceChunk } from "../src/lib/answer/types";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
+import { runEvidenceGate } from "../../src/lib/answer/evidenceGate";
+import { repairEvidenceQuotes } from "../../src/lib/answer/repairEvidenceQuotes";
+import type { AnswerPayload, EvidenceChunk } from "../../src/lib/answer/types";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);

@@ -1,8 +1,8 @@
-/**
+﻿/**
  * 回帰: クリーチャー/タマシード OR 選択でも強制選択は逃れられない（qa/45555）。
  */
-import { matchPerspectiveHints } from "../src/lib/judge/perspective";
-import { classifyIssues } from "../src/lib/judge/issues/classifyIssues";
+import { matchPerspectiveHints } from "../../src/lib/judge/perspective";
+import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
