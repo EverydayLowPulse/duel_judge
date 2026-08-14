@@ -400,7 +400,7 @@ export function CardPickerDialog({
               <>
                 質問に関連するカードがある場合はすべて選択してください。
                 <br />
-                特定のカードに関する質問でなければ、「カードなしで進む」を押してください。
+                特定のカードに関する質問でなければ、「カードなしで進む」を押してこのままお進みください。
               </>
             }
             stayLabel="戻って選ぶ"
@@ -483,13 +483,14 @@ function ConfirmGateOverlay({
         >
           {title}
         </h3>
-        <p className="mt-2 text-xs leading-relaxed text-zinc-600">{body}</p>
-        <div className="mt-5 flex flex-col gap-2">
+        <hr className="mt-3 border-0 border-t border-zinc-200" />
+        <p className="mt-3 text-xs leading-relaxed text-zinc-600">{body}</p>
+        <div className="mt-5 flex gap-2">
           <button
             type="button"
             onClick={onProceed}
             disabled={disabled}
-            className="rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-40"
+            className="min-w-0 flex-1 rounded-full border border-zinc-400 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-40"
           >
             {proceedLabel}
           </button>
@@ -497,7 +498,7 @@ function ConfirmGateOverlay({
             type="button"
             onClick={onStay}
             disabled={disabled}
-            className="rounded-full px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40"
+            className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
           >
             {stayLabel}
           </button>

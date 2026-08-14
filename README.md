@@ -4,6 +4,8 @@
 
 質問を投げると、送信前にカードを確定し、論点分類 → ルール/Q&A 検索 → 決定的バリデータまたは LLM 推論 → **Evidence Gate（出典照合）** を経て回答します。
 
+**デモ:** [https://web-two-tau-e2mnzze5db.vercel.app](https://web-two-tau-e2mnzze5db.vercel.app)
+
 ## 技術ハイライト
 
 - **Evidence Gate** — 引用必須。検索ヒットした文言との部分一致まで検証し、出典のない裁定を出さない
