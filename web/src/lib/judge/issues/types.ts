@@ -22,8 +22,6 @@ export type IssueMatch = {
   seedQaIds: string[];
   ruleRefs: string[];
   constraints: string[];
-  /** 紐づく決定的 validator があればその id */
-  validatorId?: string;
 };
 
 export type IssueClassification = {

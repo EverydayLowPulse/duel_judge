@@ -52,11 +52,6 @@ import type {
   ProcessTraceEntry,
   RunJudgeOptions,
 } from "./types";
-import { buildDeterministicAnswer } from "./validators/buildDeterministicAnswer";
-import {
-  formatValidatorConstraints,
-  runValidators,
-} from "./validators/runValidators";
 
 export type { JudgeRequest, JudgeResponse, RunJudgeOptions } from "./types";
 export type { JudgeProgressEvent, JudgeProgressStage } from "./progress";
@@ -91,7 +86,7 @@ function finalizeJudgeResponse(
       gateFailures: result.debug?.gateFailures,
       gateAdjustments: result.debug?.gateAdjustments,
       processTrace: trace,
-      llm: llm ?? (result.kind === "answer" ? "deterministic (LLMなし)" : undefined),
+      llm,
       llmCalls: calls.length > 0 ? calls : undefined,
     },
   };
@@ -107,8 +102,7 @@ function gateFailureMonologue(failures: string[]): string {
 
 /**
  * 薄い裁定パイプライン（MVP）:
- * カード解決 → Facts/Issues → 検索 → 決定的validators →
- * （不可なら決定的回答）→ 残余は LLM 回答 → Evidence Gate
+ * カード解決 → Facts/Issues → 検索 → LLM 検証 → LLM 回答 → Evidence Gate
  *
  * options.onProgress で段階進捗を受け取れる（回答トークンのストリームではない）。
  */
@@ -417,84 +411,9 @@ async function runJudgePipeline(
     };
   }
 
-  report("validate");
-  const deterministic = runValidators({
-    question,
-    facts,
-    issues,
-    chunks,
-    cardAbilityTexts: allCards.map((c) => c.abilityText),
-  });
-
-  // 決定的に可/不可が付いたら LLM を介さず回答を組み立てる（引用捏造・Evidence Gate 失敗を避ける）
-  // 「可能」の短絡: マナ／バニラ召喚／置換ブレイク行き先が allowed なら LLM に落とさない
-  const manaOrVanillaAllowed = deterministic.results.some(
-    (r) =>
-      (r.validatorId === "mana_payment" ||
-        r.validatorId === "no_written_ability_summon" ||
-        r.validatorId === "replacement_break_hand" ||
-        r.validatorId === "destroy_mana_not_swap_blocker" ||
-        r.validatorId === "seal_pending_resolve") &&
-      r.verdict === "allowed",
-  );
-  const hasCraftedConclusion = deterministic.results.some(
-    (r) => Boolean(r.craftedConclusion),
-  );
-  const onlyShortCircuitAllowedIssue =
-    issues.matches.length > 0 &&
-    issues.matches.every(
-      (m) =>
-        m.kind === "mana_payment" || m.kind === "no_written_abilities",
-    );
-  const canShortCircuit =
-    hasCraftedConclusion ||
-    deterministic.hardVerdict === "not_allowed" ||
-    (manaOrVanillaAllowed &&
-      !deterministic.results.some((r) => r.verdict === "not_allowed")) ||
-    (deterministic.hardVerdict === "allowed" && onlyShortCircuitAllowedIssue);
-  if (canShortCircuit) {
-    const aggregateForCraft =
-      deterministic.hardVerdict === "allowed" ||
-      deterministic.hardVerdict === "not_allowed"
-        ? deterministic
-        : {
-            ...deterministic,
-            hardVerdict: manaOrVanillaAllowed
-              ? ("allowed" as const)
-              : deterministic.hardVerdict,
-          };
-    const crafted = buildDeterministicAnswer({
-      question,
-      cardQuery,
-      cards: allCards,
-      chunks,
-      aggregate: aggregateForCraft,
-    });
-    if (crafted) {
-      report("evidence_gate");
-      const gate = runEvidenceGate(crafted, chunks);
-      if (gate.ok) {
-        return {
-          kind: "answer",
-          answer: gate.answer,
-          display: displayMeta(),
-          debug: {
-            chunkIds: chunks.map((c) => c.id),
-            gateAdjustments:
-              gate.adjustments.length > 0 ? gate.adjustments : undefined,
-          },
-        };
-      }
-    }
-  }
-
   let resolutionOrderVerification: ResolutionOrderVerification | undefined;
   let scenarioVerification: ScenarioVerification | undefined;
-  // 決定的に不可なら LLM 検証を省略して制約だけ渡す（コスト削減＋誤答抑止）
-  if (
-    deterministic.hardVerdict !== "not_allowed" &&
-    scenarioCards.length > 0
-  ) {
+  if (scenarioCards.length > 0) {
     // 処理順は質問に関係するときだけ。原則全文は本フェーズ system に閉じ、後段には短い Observation のみ。
     if (issues.orderRelevant) {
       report("verify_resolution_order");
@@ -520,10 +439,8 @@ async function runJudgePipeline(
     scenarioVerification?.verdict === "unknown" &&
     scenarioVerification.declarationChecks.some(
       (check) => check.conditionSatisfied === "unknown",
-    ) &&
-    deterministic.hardVerdict !== "not_allowed";
+    );
   const scenarioAnalysis = [
-    formatValidatorConstraints(deterministic),
     formatDeclarationPowerHints(facts.declarationPower ?? []),
     formatLeaveReplacementHints(facts.leaveReplacement ?? []),
     formatWrittenAbilityHints(facts.writtenAbilities ?? []),
@@ -551,7 +468,6 @@ async function runJudgePipeline(
   const principleRuleRefs = unique([
     ...issues.ruleRefs,
     ...concepts.ruleRefs,
-    ...deterministic.requiredRuleRefs,
   ]);
   const principleHints = [
     ...issues.matches

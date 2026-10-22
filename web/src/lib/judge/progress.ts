@@ -9,7 +9,6 @@ export type JudgeProgressStage =
   | "resolve_scenario"
   | "build_facts"
   | "retrieve"
-  | "validate"
   | "verify_resolution_order"
   | "verify_scenario"
   | "generate_answer"
@@ -36,7 +35,6 @@ const STAGE_MESSAGES: Record<JudgeProgressStage, string> = {
   resolve_scenario: "関連カードを取得中…",
   build_facts: "盤面の事実を整理中…",
   retrieve: "公式Q&A・ルールを検索中…",
-  validate: "決定的ルールで検証中…",
   verify_resolution_order: "効果の処理順を整理中…",
   verify_scenario: "シナリオを検証中…",
   generate_answer: "回答を生成中…",
