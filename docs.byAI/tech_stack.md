@@ -9,7 +9,7 @@
 | 配信 | **PWA（Web）** | ストア審査料・審査待ちを避ける。裁定AIにネイティブ必須機能はない |
 | 言語 | **TypeScript** | 慣れている。UIとAPIを同一言語にできる。ボトルネックはLLM待ちなので言語差は効きにくい |
 | 枠組み | **Next.js（App Router）** | TSフルスタック向き。API Route / Server Actions で取得・Gate・LLM呼び出しをサーバ側に置ける |
-| アプリ配置 | **`web/`** | ルートは `docs/` 等のため、実装は `web/` 配下 |
+| アプリ配置 | **`web/`** | ルートは `docs.byAI/` 等のため、実装は `web/` 配下 |
 | 重い処理の場所 | **サーバ側** | カード取得、ルール/Q&A検索、Evidence Gate、LLM呼び出し |
 | クライアント | 表示・カード確定UI・PWA壳 | チャットUI程度 |
 
@@ -40,7 +40,7 @@ npx vercel --prod
 
 ---
 
-- 本番チャット: `http://localhost:3000/`（状況入力 → カード確定ポップアップ → answer表示。フローは `docs/project.md`）
+- 本番チャット: `http://localhost:3000/`（状況入力 → カード確定ポップアップ → answer表示。フローは `docs.byAI/project.md`）
 - カード名解決: `GET /api/cards?q=レッドゾーン`（確定は `POST` で `cardId`）
   - 公式0件時は dmwiki 検索で正式名候補 → 公式DB再突合（`CARD_RESOLVE_WEB=auto|on|off`）。論拠には使わない
   - 任意: `DEEPSEEK_API_KEY` があれば検索語整形のみ（Gemini grounding は使わない）
@@ -89,7 +89,7 @@ npx tsx scripts/smoke/smoke-resolution-order.ts
 
 ## データ（既存方針）
 
-`docs/project.md` の RAG 方針に従う。
+`docs.byAI/project.md` の RAG 方針に従う。
 
 - ルール・Q&A: ローカルミラー（リポジトリルートの `data/`）
 - **総合ルール索引**: ビルド時に `web/data/rules/bundled-index.json` を生成して同梱（実行時 PDF 抽出を避ける）。ルール改訂時は `npm run build:rules` または再デプロイ
@@ -103,6 +103,6 @@ npx tsx scripts/smoke/smoke-resolution-order.ts
 
 ## 参照
 
-- 全体方針: `docs/project.md`
-- 回答型: `docs/answer_format.md`
-- 評価: `docs/evaluation.md`
+- 全体方針: `docs.byAI/project.md`
+- 回答型: `docs.byAI/answer_format.md`
+- 評価: `docs.byAI/evaluation.md`

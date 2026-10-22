@@ -1,4 +1,4 @@
-/** 公式総合ルール（docs/research_official_sources.md と同じ） */
+/** 公式総合ルール（docs.byAI/research_official_sources.md と同じ） */
 export const RULE_PDF_URL =
   "https://dm.takaratomy.co.jp/img/dm_rule_20260410_4.pdf";
 

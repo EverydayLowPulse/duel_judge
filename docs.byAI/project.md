@@ -52,7 +52,7 @@
 
 現状の推論は **ゲーム進行のフルシミュレーションではなく、論点駆動＋原則制約＋LLM** である。  
 処理順が論点のときだけ `verify_resolution_order` が、質問に関係する開始イベントから短い Observation を作る（原則全文は当該フェーズの system に閉じる）。  
-盤面状態機械（StepEngine）は将来の別ブランチ実験候補（詳細は `docs/inference_approaches.md`）。
+盤面状態機械（StepEngine）は将来の別ブランチ実験候補（詳細は `docs.byAI/inference_approaches.md`）。
 
 - `resolve_card_name()` — カード名解決（後述）
 - `fetch_card_from_official_db()` — 公式DBからカード能力を取得（検索POST→id特定→詳細GET）。ローカルキャッシュを先に確認し、ミスまたはTTL切れの場合のみ公式へ取得しに行く
@@ -64,7 +64,7 @@
 - `run_validators()` — 汎用ルールを純関数で判定（例: 多色マナ支払い）。`not_allowed` のときは LLM を介さず総合ルール引用付き回答を組み立て、Evidence Gate へ渡す
 - `verify_resolution_order()` — 処理順・同時誘発が論点のときだけ。開始イベントを動的に選び、誘発と解決の分離・101.4a の解決キュー観察を短い制約として後段へ渡す（原則全文は積み増ししない）
 - `verify_declaration_preconditions()` — 使用宣言時点のクリーチャーを固定し、各能力の文明・種族・コスト・パワー条件を公式カード情報と照合する。後の進化や効果解決で条件を満たしても、宣言時点へ遡って許可しない（決定的に解けない残余をLLMが担当）
-- `generate_answer()` — 論拠付き回答の生成（内部はJSON。詳細は `docs/answer_format.md`）
+- `generate_answer()` — 論拠付き回答の生成（内部はJSON。詳細は `docs.byAI/answer_format.md`）
 
 最終段階で **Evidence Gate（出典ゲート）** を設ける。
 
@@ -257,7 +257,7 @@ data/
 1. `IssueKind` と検出条件を `classifyIssues`（または専用 matcher）に追加する
 2. `concepts.ts` に `RuleConcept`（`ruleRefs` / `qaSeeds` / `validatorId`）を登録する
 3. 決定的に解けるなら `validators/` に純関数を追加し、`runValidators` から呼ぶ
-4. 評価ケースを `docs/eval/` に1件以上置き、単位テストまたは `scripts/smoke/smoke-*.ts` で回帰する
+4. 評価ケースを `docs.byAI/eval/` に1件以上置き、単位テストまたは `scripts/smoke/smoke-*.ts` で回帰する
 
 ## モデル
 
@@ -274,7 +274,7 @@ data/
 
 公式Q&A自体が「質問と正解のペア」なので、手作りせず自動生成する。ミラーしたQ&Aの一部をホールドアウト（検索対象から除外）してテスト問題にすることで、「答えを検索でカンニングできない状態で、ルールからの推論だけで正解できるか」を測定できる。
 
-採点方法・合格ラインの詳細は `docs/evaluation.md`。
+採点方法・合格ラインの詳細は `docs.byAI/evaluation.md`。
 
 ### モデル切替
 
@@ -313,7 +313,7 @@ data/
 → **狭い validator の積み上げでは足りない。別ブランチで最小スパイクする方針。**  
 時系列クラス（TP優先無視・110.5a 無視）は、原則プロンプトでも「バトル／手札」短絡でも再発する（封印メタ／山札下メタ×出た時など）。  
 デュエマ全体を if 分岐で書き切るのも非現実的なので、master の応急手当と切り離し、`出す時＋同時誘発＋101.4a` だけを実験ブランチで試す。  
-記録: `docs/inference_approaches.md`
+記録: `docs.byAI/inference_approaches.md`
 
 ## 開発フェーズ
 

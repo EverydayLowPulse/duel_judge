@@ -1,6 +1,6 @@
 # 裁定推論アプローチ（研究メモ / ADR）
 
-> **位置づけ**: 研究メモ・ADR です。現行の製品パイプラインの正本は `docs/project.md` です。  
+> **位置づけ**: 研究メモ・ADR です。現行の製品パイプラインの正本は `docs.byAI/project.md` です。  
 > ここに書くステップ駆動（StepEngine）などは **採用済みの実装ではなく**、将来実験の候補と失敗ログです。
 
 裁定の正しさは「ルール知識の有無」だけでなく、**いつ・誰の効果が・どの順で・どの状態で解決されるか**の追跡に依存する。  
@@ -151,7 +151,7 @@ ScenarioFacts
 
 ## 関連
 
-- 処理フロー概要: `docs/project.md`「処理フロー」
+- 処理フロー概要: `docs.byAI/project.md`「処理フロー」
 - 待機・封印の原則: `web/src/lib/rules/ontology/concepts.ts`（`pending_abilities`）
 - 処理順 concept: `resolution_order`（原則全文は verifier system 側）
 - 処理順 Observation: `web/src/lib/llm/resolutionOrderVerifier.ts`
