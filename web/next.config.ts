@@ -22,9 +22,12 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: lanDevOrigins(),
   // PDF 抽出（unpdf）をバンドルせず Node 側で読む
   serverExternalPackages: ["unpdf"],
-  // ビルド同梱のルール索引を Serverless 関数に含める
+  // ビルド同梱のルール索引・カード全件ミラーを Serverless 関数に含める
   outputFileTracingIncludes: {
-    "/api/**/*": ["./data/rules/bundled-index.json"],
+    "/api/**/*": [
+      "./data/rules/bundled-index.json",
+      "./data/cards/bundled-cards.json",
+    ],
   },
 };
 

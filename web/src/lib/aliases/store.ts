@@ -48,3 +48,8 @@ export async function upsertAlias(
   await saveIndex(index);
   return entry;
 }
+
+/** 全エントリ（質問文からの候補サジェストで、略称が文中にあるかを見る） */
+export async function listAliasEntries(): Promise<AliasEntry[]> {
+  return Object.values(await ensureIndex());
+}

@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build:rules": "tsx scripts/build-rules-index.ts",
-    "prebuild": "npm run build:rules",
+    "prebuild": "npm run build:rules && npm run build:cards",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "mirror:cards": "tsx scripts/mirror-cards.ts",
+    "build:cards": "tsx scripts/build-cards-bundle.ts"
   },
   "dependencies": {
     "@google/genai": "^2.12.0",

@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import type {
+  QuerySuggestResult,
+  QuestionSuggestResult,
+} from "@/lib/cards/suggest";
+import type { QuestionSuggestionGroup } from "@/lib/cards/nameSearch";
 import type { OfficialCard } from "@/lib/official/types";
 import type {
   ClarifyCandidate,
@@ -29,6 +34,17 @@ type SearchState =
   | { kind: "options"; options: CardOption[]; note?: string }
   | { kind: "empty"; note: string; tried: string[] }
   | { kind: "error"; message: string };
+
+/** 質問文からの候補。全件ミラーがない環境では出さない */
+type QuestionSuggestState =
+  | { kind: "loading" }
+  | { kind: "ready"; groups: QuestionSuggestionGroup[] }
+  | { kind: "unavailable" };
+
+/** 入力中候補の待ち時間。打鍵ごとに投げない程度に短く */
+const TYPEAHEAD_DELAY_MS = 150;
+/** 質問文候補の1グループに出す枚数。残りは「ほか N件」で検索窓へ */
+const SUGGESTION_CARDS_PER_GROUP = 4;
 
 /** 文明の色。カード個別ではなくゲーム共通の対応 */
 const CIVILIZATION_COLORS: Record<string, string> = {
@@ -91,6 +107,11 @@ export function CardPickerDialog({
   // 閉じるとアンマウントされるので、開き直すたびにこの初期値から始まる
   const [query, setQuery] = useState(() => initialQuery?.trim() ?? "");
   const [search, setSearch] = useState<SearchState>({ kind: "idle" });
+  const [questionSuggest, setQuestionSuggest] = useState<QuestionSuggestState>(
+    { kind: "loading" },
+  );
+  /** 入力中候補と明示検索の応答順を揃える（古い応答で上書きしない） */
+  const searchSeq = useRef(0);
   const [picks, setPicks] = useState<CardPick[]>([]);
   const [editingQuestion, setEditingQuestion] = useState(false);
   /** 0枚 / 1枚で進むときの弱い確認。動的判定ではなく枚数だけの一律確認 */
@@ -106,6 +127,70 @@ export function CardPickerDialog({
       window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     if (finePointer) searchInputRef.current?.focus();
   }, []);
+
+  // 質問文から候補を出す。編集中は待ち、編集を終えたら取り直す
+  useEffect(() => {
+    if (editingQuestion) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/cards/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        const data = (await res.json()) as QuestionSuggestResult;
+        if (cancelled) return;
+        setQuestionSuggest(
+          res.ok && data.available
+            ? { kind: "ready", groups: data.groups }
+            : { kind: "unavailable" },
+        );
+      } catch {
+        if (!cancelled) setQuestionSuggest({ kind: "unavailable" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [question, editingQuestion]);
+
+  // 入力中の候補（ローカル全件ミラー。公式へは行かない）
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const seq = ++searchSeq.current;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/cards/suggest?q=${encodeURIComponent(q)}`,
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as QuerySuggestResult;
+        if (seq !== searchSeq.current) return;
+        if (data.cards.length > 0) {
+          setSearch({
+            kind: "options",
+            options: data.cards,
+            note:
+              data.total > data.cards.length
+                ? `${data.total}件中${data.cards.length}件を表示。続けて入力すると絞り込めます`
+                : undefined,
+          });
+        } else if (data.available) {
+          setSearch({
+            kind: "empty",
+            note: "一致するカードがありません。「検索」を押すと公式DBも探します（新しいカードの可能性があります）。",
+            tried: [],
+          });
+        }
+        // ミラーがない環境では何もしない（従来どおり「検索」で公式へ）
+      } catch {
+        // 入力中候補の失敗は黙って無視（「検索」は使える）
+      }
+    }, TYPEAHEAD_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -137,12 +222,14 @@ export function CardPickerDialog({
       });
       return;
     }
+    const seq = ++searchSeq.current;
     setSearch({ kind: "loading" });
     try {
       const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
       const data = (await res.json()) as ResolveCardNameResult & {
         error?: string;
       };
+      if (seq !== searchSeq.current) return;
       if (!res.ok) {
         setSearch({
           kind: "error",
@@ -184,7 +271,16 @@ export function CardPickerDialog({
     }
   }
 
-  function togglePick(option: CardOption) {
+  function changeQuery(value: string) {
+    setQuery(value);
+    if (!value.trim()) {
+      searchSeq.current += 1;
+      setSearch({ kind: "idle" });
+    }
+  }
+
+  /** mentionHint: 質問文候補から選んだときの語句（略称辞書の学習に使う） */
+  function togglePick(option: CardOption, mentionHint?: string) {
     const already = picks.some((p) => p.cardId === option.cardId);
     if (already) {
       setPicks((prev) => prev.filter((p) => p.cardId !== option.cardId));
@@ -192,7 +288,7 @@ export function CardPickerDialog({
       return;
     }
 
-    const mention = query.trim() || option.officialName;
+    const mention = mentionHint ?? (query.trim() || option.officialName);
     setPicks((prev) => [
       ...prev,
       {
@@ -204,8 +300,7 @@ export function CardPickerDialog({
     ]);
     setConfirmGate(null);
     // 次のカードを打ちやすくする。検索直後の伸ばし打ちは残し、選択時だけ消す
-    setQuery("");
-    setSearch({ kind: "idle" });
+    changeQuery("");
     requestAnimationFrame(() => focusSearchIfDesktop());
   }
 
@@ -291,7 +386,7 @@ export function CardPickerDialog({
               <input
                 ref={searchInputRef}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => changeQuery(e.target.value)}
                 disabled={submitting}
                 placeholder="カード名を検索"
                 autoComplete="off"
@@ -302,8 +397,7 @@ export function CardPickerDialog({
                 <button
                   type="button"
                   onClick={() => {
-                    setQuery("");
-                    setSearch({ kind: "idle" });
+                    changeQuery("");
                     focusSearchIfDesktop();
                   }}
                   disabled={submitting}
@@ -362,12 +456,18 @@ export function CardPickerDialog({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <SearchResult
             state={search}
+            questionSuggest={questionSuggest}
             picks={picks}
             disabled={submitting}
             onToggle={togglePick}
             onRetryWith={(term) => {
               setQuery(term);
               void runSearch(term);
+            }}
+            onBrowse={(term) => {
+              // 「ほか N件」: その語で入力中候補を出す（ユーザー操作のときだけ窓に入れる）
+              changeQuery(term);
+              focusSearchIfDesktop();
             }}
           />
         </div>
@@ -561,31 +661,35 @@ function QuestionPreview({
 
 function SearchResult({
   state,
+  questionSuggest,
   picks,
   disabled,
   onToggle,
   onRetryWith,
+  onBrowse,
 }: {
   state: SearchState;
+  questionSuggest: QuestionSuggestState;
   picks: CardPick[];
   disabled: boolean;
-  onToggle: (option: CardOption) => void;
+  onToggle: (option: CardOption, mentionHint?: string) => void;
   onRetryWith: (term: string) => void;
+  onBrowse: (term: string) => void;
 }) {
   if (state.kind === "idle") {
     return (
-      <p className="mt-6 text-center text-xs text-zinc-400">
-        カード名を入力して検索してください
-      </p>
+      <QuestionSuggestions
+        state={questionSuggest}
+        picks={picks}
+        disabled={disabled}
+        onToggle={onToggle}
+        onBrowse={onBrowse}
+      />
     );
   }
 
   if (state.kind === "loading") {
-    return (
-      <p className="mt-6 text-center text-xs text-zinc-500">
-        公式カードDBを検索中…（数秒かかります）
-      </p>
-    );
+    return <p className="mt-6 text-center text-xs text-zinc-500">検索中…</p>;
   }
 
   if (state.kind === "error") {
@@ -624,52 +728,150 @@ function SearchResult({
   return (
     <div className="mt-3 space-y-2">
       {state.note && <p className="text-xs text-zinc-500">{state.note}</p>}
-      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {state.options.map((option) => {
-          const picked = picks.some((p) => p.cardId === option.cardId);
-          return (
-            <li key={option.cardId}>
-              <button
-                type="button"
-                onClick={() => onToggle(option)}
-                disabled={disabled}
-                aria-pressed={picked}
-                className={`flex h-full w-full flex-col gap-1.5 rounded-2xl border p-3 text-left transition disabled:opacity-50 ${
-                  picked
-                    ? "border-zinc-900 bg-zinc-900/5"
-                    : "border-zinc-200 bg-white hover:bg-zinc-50"
-                }`}
-              >
-                <span className="flex gap-1" aria-hidden>
-                  {(option.civilizations.length > 0
-                    ? option.civilizations
-                    : ["?"]
-                  ).map((civ, i) => (
-                    <span
-                      key={`${civ}-${i}`}
-                      className={`h-1.5 w-5 rounded-full ${
-                        CIVILIZATION_COLORS[civ] ?? "bg-zinc-300"
-                      }`}
-                    />
-                  ))}
-                </span>
-                <span className="text-sm font-medium leading-snug">
-                  {option.officialName}
-                </span>
-                <span className="text-xs text-zinc-500">
-                  {formatOptionMeta(option)}
-                </span>
-                {picked && (
-                  <span className="text-xs font-medium text-zinc-900">
-                    選択中
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <CardOptionGrid
+        options={state.options}
+        picks={picks}
+        disabled={disabled}
+        onToggle={(option) => onToggle(option)}
+      />
     </div>
+  );
+}
+
+/**
+ * 検索窓が空のときに出す「質問文から見つかった候補」。
+ * 語句ごとにまとめ、確定はユーザーに任せる。
+ */
+function QuestionSuggestions({
+  state,
+  picks,
+  disabled,
+  onToggle,
+  onBrowse,
+}: {
+  state: QuestionSuggestState;
+  picks: CardPick[];
+  disabled: boolean;
+  onToggle: (option: CardOption, mentionHint?: string) => void;
+  onBrowse: (term: string) => void;
+}) {
+  if (state.kind === "unavailable") {
+    return (
+      <p className="mt-6 text-center text-xs text-zinc-400">
+        カード名を入力して検索してください
+      </p>
+    );
+  }
+  if (state.kind === "loading") {
+    return (
+      <p className="mt-6 text-center text-xs text-zinc-400">
+        質問文からカードを探しています…
+      </p>
+    );
+  }
+  if (state.groups.length === 0) {
+    return (
+      <p className="mt-6 text-center text-xs text-zinc-400">
+        質問文からはカードが見つかりませんでした。カード名を入力して検索してください
+      </p>
+    );
+  }
+
+  return (
+    <section className="space-y-4" aria-label="質問文から見つかった候補">
+      <p className="text-xs text-zinc-500">
+        質問文から見つかった候補です。関係するカードを選んでください
+      </p>
+      {state.groups.map((group) => {
+        const shown = group.cards.slice(0, SUGGESTION_CARDS_PER_GROUP);
+        const rest = group.total - shown.length;
+        return (
+          <div key={`${group.kind}:${group.mention}`} className="space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="min-w-0 truncate text-sm font-medium text-zinc-800">
+                「{group.mention}」
+              </h3>
+              {rest > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onBrowse(group.mention)}
+                  disabled={disabled}
+                  className="shrink-0 rounded-full px-2 py-0.5 text-xs text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40"
+                >
+                  ほか{rest}件
+                </button>
+              )}
+            </div>
+            <CardOptionGrid
+              options={shown}
+              picks={picks}
+              disabled={disabled}
+              onToggle={(option) => onToggle(option, group.mention)}
+            />
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function CardOptionGrid({
+  options,
+  picks,
+  disabled,
+  onToggle,
+}: {
+  options: CardOption[];
+  picks: CardPick[];
+  disabled: boolean;
+  onToggle: (option: CardOption) => void;
+}) {
+  return (
+    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {options.map((option) => {
+        const picked = picks.some((p) => p.cardId === option.cardId);
+        return (
+          <li key={option.cardId}>
+            <button
+              type="button"
+              onClick={() => onToggle(option)}
+              disabled={disabled}
+              aria-pressed={picked}
+              className={`flex h-full w-full flex-col gap-1.5 rounded-2xl border p-3 text-left transition disabled:opacity-50 ${
+                picked
+                  ? "border-zinc-900 bg-zinc-900/5"
+                  : "border-zinc-200 bg-white hover:bg-zinc-50"
+              }`}
+            >
+              <span className="flex gap-1" aria-hidden>
+                {(option.civilizations.length > 0
+                  ? option.civilizations
+                  : ["?"]
+                ).map((civ, i) => (
+                  <span
+                    key={`${civ}-${i}`}
+                    className={`h-1.5 w-5 rounded-full ${
+                      CIVILIZATION_COLORS[civ] ?? "bg-zinc-300"
+                    }`}
+                  />
+                ))}
+              </span>
+              <span className="text-sm font-medium leading-snug">
+                {option.officialName}
+              </span>
+              <span className="text-xs text-zinc-500">
+                {formatOptionMeta(option)}
+              </span>
+              {picked && (
+                <span className="text-xs font-medium text-zinc-900">
+                  選択中
+                </span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
