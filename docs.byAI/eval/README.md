@@ -1,4 +1,4 @@
-# 小さな評価セット（`docs/eval/`）
+# 小さな評価セット（`docs.byAI/eval/`）
 
 Phase 1 向けの**固定問題集**。最近つまずいた裁定を中心に、正答の要約と必須出典を先に決めておく。
 
@@ -37,6 +37,6 @@ npx tsx scripts/run-eval.ts --full --id=replacement-break-saint-castle-001
 
 ## 足し方
 
-1. 誤答・あやしい回答が出たら `docs/eval/<id>.json` を1件追加
+1. 誤答・あやしい回答が出たら `docs.byAI/eval/<id>.json` を1件追加
 2. 可能なら対応する `web/scripts/smoke/smoke-*.ts` も足す（論点 seed など決定的部分）
 3. たまに `--full` で通し、落ちたものを直す

@@ -6,7 +6,7 @@
  *   npx tsx scripts/run-eval.ts --full       # runJudge まで実行して自動採点
  *   npx tsx scripts/run-eval.ts --id=xxx     # 1件だけ（--full と併用可）
  *
- * 自動採点は補助。最終の正誤は docs/evaluation.md どおり人手。
+ * 自動採点は補助。最終の正誤は docs.byAI/evaluation.md どおり人手。
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -39,7 +39,7 @@ type AutoScore = {
 };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EVAL_DIR = path.join(ROOT, "docs", "eval");
+const EVAL_DIR = path.join(ROOT, "docs.byAI", "eval");
 
 async function loadCases(filterId?: string): Promise<EvalCase[]> {
   const files = (await readdir(EVAL_DIR))
@@ -155,7 +155,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`eval cases: ${cases.length} under docs/eval/`);
+  console.log(`eval cases: ${cases.length} under docs.byAI/eval/`);
   for (const c of cases) {
     console.log(
       `  [${c.set}] ${c.id} — ${c.question.slice(0, 40)}${c.question.length > 40 ? "…" : ""}`,

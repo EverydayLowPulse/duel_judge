@@ -14,7 +14,7 @@ MVPのモデル選定は **Aを主、Bを副** とする。Bは `confidence: low
 
 規模: **合計20〜50問**（A: 15〜40、B: 5〜15 程度）。初回は人手採点。
 
-実装済みの小さなセットは [`docs/eval/`](./eval/)（現状 8 問前後。増やしていく）。
+実装済みの小さなセットは [`docs.byAI/eval/`](./eval/)（現状 8 問前後。増やしていく）。
 ランナー: `cd web && npx tsx scripts/run-eval.ts`（`--full` で `runJudge`）。
 
 ## 1問あたりの記録項目

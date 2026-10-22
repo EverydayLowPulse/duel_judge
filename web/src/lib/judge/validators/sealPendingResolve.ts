@@ -5,7 +5,7 @@ import type { ValidatorInput, ValidatorResult } from "./types";
  *
  * ※ デュエマ解決のモデルではない。110.5a の一例を機械固定する対症療法。
  *   「バトル／手札」以外（山札下・破壊・TP順など）はカバーしない。
- *   根本はステップ駆動（docs/inference_approaches.md）側で試す。
+ *   根本はステップ駆動（docs.byAI/inference_approaches.md）側で試す。
  *
  * 原則のみ（カード名分岐なし）:
  * - 出た時点で誘発条件を満たせば誘発し待機する（110.5a）
