@@ -1,0 +1,29 @@
+# master への push と PR のたびに、型チェック・lint・単体テストを走らせる。
+# 公式サイトや LLM に触れるもの（smoke、評価、npm run build の prebuild）は入れない。
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: 型チェック
+        run: npx tsc --noEmit
+      - name: lint
+        run: npm run lint
+      - name: 単体テスト
+        run: npm test
