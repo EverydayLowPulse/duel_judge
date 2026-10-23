@@ -2,12 +2,12 @@ import { requireEnv, resolveEnv } from "../env";
 import { getLlmModelOverride } from "../providerContext";
 
 export function getDeepseekModelName(): string {
-  // 公式 API ID: deepseek-v4-pro / deepseek-v4-flash
-  // flash は 2026-07-31 以降 DeepSeek-V4-Flash-0731（正式版）。呼び出し方は変わらず。
+  // 公式 API ID: deepseek-v4-pro（V4）/ deepseek-flash（V4.1）
+  // 旧 ID の deepseek-v4-flash も V4.1 Flash に転送される
   return (
     getLlmModelOverride() ||
     resolveEnv("DEEPSEEK_MODEL") ||
-    "deepseek-v4-flash"
+    "deepseek-flash"
   );
 }
 

@@ -17,7 +17,7 @@ export type CatalogModel = {
 
 export const LLM_MODEL_CATALOG: CatalogModel[] = [
   {
-    // Pro 正式版は未公開（公式案内どおり Preview 相当のまま）
+    // Pro は V4.1 が出ていないので V4（DeepSeek-V4-Pro-0813）のまま
     id: "deepseek-v4-pro",
     provider: "deepseek",
     label: "DeepSeek V4",
@@ -26,10 +26,10 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     enabled: true,
   },
   {
-    // 正式版 DeepSeek-V4-Flash-0731。API ID は deepseek-v4-flash のまま。
-    id: "deepseek-v4-flash",
+    // DeepSeek-V4.1-Flash-1017。旧 ID の deepseek-v4-flash も同じモデルに転送される
+    id: "deepseek-flash",
     provider: "deepseek",
-    label: "DeepSeek V4",
+    label: "DeepSeek V4.1",
     tag: "Flash",
     recommended: true,
     enabled: true,
@@ -50,17 +50,9 @@ export const LLM_MODEL_CATALOG: CatalogModel[] = [
     recommended: false,
     enabled: true,
   },
-  {
-    id: "gemini-3.1-pro",
-    provider: "gemini",
-    label: "Gemini 3.1",
-    tag: "Pro",
-    recommended: false,
-    enabled: true,
-  },
 ];
 
-export const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+export const DEFAULT_MODEL_ID = "deepseek-flash";
 
 export function getCatalogModel(id: string): CatalogModel | undefined {
   return LLM_MODEL_CATALOG.find((m) => m.id === id && m.enabled);

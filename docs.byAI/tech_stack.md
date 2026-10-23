@@ -62,8 +62,9 @@ npx vercel --prod
 - 決定的validators: `web/src/lib/judge/validators/`（例: 多色マナ支払い）。`not_allowed` は `buildDeterministicAnswer` でLLM省略回答にする
 - LLM: モデル単位で選択（UI の縦ピッカー / `POST /api/judge` の `model`）
   - カタログ: `web/src/lib/llm/modelCatalog.ts`（推奨を上位表示）
-  - いま選べる: `deepseek-v4-pro` / `deepseek-v4-flash` / `gemini-3.6-flash` / `gemini-3.5-flash-lite` / `gemini-3.1-pro`
-  - DeepSeek Flash は 2026-07-31 正式版（裏バージョン `DeepSeek-V4-Flash-0731`）。API ID は `deepseek-v4-flash` のまま。Pro 正式版は未公開
+  - いま選べる: `deepseek-v4-pro` / `deepseek-flash` / `gemini-3.6-flash` / `gemini-3.5-flash-lite`
+  - DeepSeek Flash は V4.1（裏バージョン `DeepSeek-V4.1-Flash-1017`、API ID `deepseek-flash`）。旧 ID `deepseek-v4-flash` も同じモデルに転送される。Pro は V4.1 が無く V4（`DeepSeek-V4-Pro-0813`）のまま
+  - Gemini Pro は無料枠が無くなったので外した
   - サーバ既定: `LLM_PROVIDER` + `DEEPSEEK_MODEL` / `GEMINI_MODEL`（`model` 未指定時）
   - `provider=auto|gemini|deepseek` は後方互換
   - Gemini: `GEMINI_API_KEY` / DeepSeek: `DEEPSEEK_API_KEY`

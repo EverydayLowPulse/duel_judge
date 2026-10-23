@@ -41,7 +41,7 @@ type JudgeDebug = {
   gateAdjustments?: string[];
   /** Gate で弾かれた／見直したときの過程（UI用） */
   processTrace?: ProcessTraceEntry[];
-  /** 例: gemini:gemini-3-flash-preview → deepseek:deepseek-v4-flash */
+  /** 例: gemini:gemini-3-flash-preview → deepseek:deepseek-flash */
   llm?: string;
   llmCalls?: Array<{
     provider: "gemini" | "deepseek";
