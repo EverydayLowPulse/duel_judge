@@ -3,6 +3,11 @@ import {
   resolveCardById,
   resolveCardName,
 } from "@/lib/resolve/resolveCardName";
+import { createRateLimiter } from "@/lib/http/ipRateLimit";
+import { rejectIfLimited } from "@/lib/http/limitRequest";
+
+/** 1回で公式へ最大12回アクセスしうるので厳しめにする */
+const limiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
 
 /**
  * GET /api/cards?q=レッドゾーン
@@ -12,6 +17,8 @@ import {
  * clarify 後の選択で確定する。
  */
 export async function GET(req: NextRequest) {
+  const limited = rejectIfLimited(limiter, req);
+  if (limited) return limited;
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q) {
     return NextResponse.json(
@@ -32,6 +39,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = rejectIfLimited(limiter, req);
+  if (limited) return limited;
   let body: { q?: string; cardId?: string };
   try {
     body = await req.json();
