@@ -42,6 +42,10 @@ npx vercel --prod
 
 - 本番チャット: `http://localhost:3000/`（状況入力 → カード確定ポップアップ → answer表示。フローは `docs.byAI/project.md`）
 - カード名解決: `GET /api/cards?q=レッドゾーン`（確定は `POST` で `cardId`）
+- カード候補サジェスト（全件ミラーのローカル検索。公式へは行かない）
+  - 入力中: `GET /api/cards/suggest?q=れっどぞ` → `{ available, total, cards }`（略称辞書の候補が先頭）
+  - 質問文から: `POST /api/cards/suggest` `{ question }` → `{ available, groups: [{ mention, kind, total, cards }] }`
+  - `available: false` は同梱ミラーがない状態（UIはサジェストを出さず、従来の検索だけにする）
   - 公式0件時は dmwiki 検索で正式名候補 → 公式DB再突合（`CARD_RESOLVE_WEB=auto|on|off`）。論拠には使わない
   - 任意: `DEEPSEEK_API_KEY` があれば検索語整形のみ（Gemini grounding は使わない）
 - 裁定: `POST /api/judge` `{ question, confirmedCards?, cardQuery?, cardId?, stream? }`
@@ -65,6 +69,15 @@ npx vercel --prod
   - Gemini: `GEMINI_API_KEY` / DeepSeek: `DEEPSEEK_API_KEY`
 
   - 設定例は `web/.env.example`
+
+### 単体テスト
+
+`node:test` を `tsx --test` で動かす（追加依存なし）。LLM・公式サイトに触れない純関数だけを対象にする。
+
+```bash
+cd web
+npm test   # src/**/*.test.ts
+```
 
 ### 回帰スモーク（例・開発者向け）
 
@@ -93,9 +106,9 @@ npx tsx scripts/smoke/smoke-resolution-order.ts
 
 - ルール・Q&A: ローカルミラー（リポジトリルートの `data/`）
 - **総合ルール索引**: ビルド時に `web/data/rules/bundled-index.json` を生成して同梱（実行時 PDF 抽出を避ける）。ルール改訂時は `npm run build:rules` または再デプロイ
-- カード: 都度取得 + TTL付きオンデマンドキャッシュ（`data/cards/`）
+- カード: 全件ミラー（`npm run mirror:cards` → `data/cards/`）を `npm run build:cards` で `web/data/cards/bundled-cards.json` に固めて同梱。ミラーにない新カードだけ都度取得 + TTL付きキャッシュ
 - 略称辞書: `data/aliases/`（1対N）
-- `data/` は原則 `.gitignore`（`bundled-index.json` も生成物として ignore）
+- `data/` は原則 `.gitignore`（`bundled-index.json` / `bundled-cards.json` も生成物として ignore）
 
 ## 認証・課金
 

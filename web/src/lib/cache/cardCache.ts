@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { cardsCacheDir } from "../paths";
 import type { OfficialCard } from "../official/types";
+import { isCurrentCardShape } from "../cards/mirror";
 
 /** カードテキストはほぼ変わらないので長め（30日） */
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -20,36 +21,7 @@ export async function readCardCache(cardId: string): Promise<OfficialCard | null
     const card = JSON.parse(raw) as OfficialCard;
     const age = Date.now() - Date.parse(card.fetchedAt);
     if (!Number.isFinite(age) || age > TTL_MS) return null;
-    // v2: 宣言条件の検証に使うカード属性がない旧キャッシュは再取得する。
-    if (
-      !Array.isArray(card.civilizations) ||
-      !Array.isArray(card.races) ||
-      !("power" in card) ||
-      !("cost" in card)
-    ) {
-      return null;
-    }
-    // v3: ツインパクトは両面の能力が必要。旧キャッシュは片面だけなので捨てる。
-    if (
-      !Array.isArray(card.faces) ||
-      card.faces.length === 0 ||
-      (card.officialName.includes("/") && card.faces.length < 2)
-    ) {
-      return null;
-    }
-    // v4: マナ支払い検証用。manaValue が無い旧キャッシュは再取得する。
-    if (!("manaValue" in card)) {
-      return null;
-    }
-    // v5: 誤パース（例: mana=20）を捨てる。公式「マナ」欄は通常 1（最大でも小さめ）。
-    if (
-      card.manaValue != null &&
-      (!Number.isInteger(card.manaValue) ||
-        card.manaValue < 1 ||
-        card.manaValue > 9)
-    ) {
-      return null;
-    }
+    if (!isCurrentCardShape(card)) return null;
     return card;
   } catch {
     return null;

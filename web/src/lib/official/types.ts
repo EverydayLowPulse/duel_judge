@@ -22,6 +22,11 @@ export type OfficialCard = {
   abilityText: string;
   /** ツインパクト等の各面。片面カードは1件 */
   faces: OfficialCardFace[];
+  /**
+   * パーサの版（CARD_PARSER_VERSION）。未設定は v1（空の能力欄を捨てていた旧パーサ）。
+   * v2 以降は能力のない面も abilityText "" の面として持つ。
+   */
+  parserVersion?: number;
   detailUrl: string;
   fetchedAt: string;
 };

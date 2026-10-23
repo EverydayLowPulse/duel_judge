@@ -1,7 +1,10 @@
 import * as cheerio from "cheerio";
 import type { CardResolveResult, CardSearchHit, OfficialCard } from "./types";
+import { parseCardListHtml, type CardListPage } from "./cardList";
 import { withOfficialRateLimit } from "./rateLimit";
 import { readCardCache, writeCardCache } from "../cache/cardCache";
+import { loadCardMirror } from "../cards/mirror";
+import { searchCardNames } from "../cards/nameSearch";
 import {
   buildOfficialSearchVariants,
   nameKeyMatches,
@@ -13,22 +16,34 @@ type CheerioAPI = ReturnType<typeof cheerio.load>;
 const BASE = "https://dm.takaratomy.co.jp";
 const UA = "duel_judge/0.1 (personal research; respectful rate limit)";
 
-function detailUrl(cardId: string): string {
-  return `${BASE}/card/detail/?id=${encodeURIComponent(cardId)}`;
+/**
+ * 詳細パーサの版。2: 空の能力欄（バニラ面）も面として残す（面の数＝公式の面の数）
+ */
+export const CARD_PARSER_VERSION = 2;
+
+/**
+ * 公式詳細URL。id の + と $ は生のままでないと公式が空ページを返す
+ * （%2B / %24 にすると別 id 扱い）。クエリを壊す文字だけエンコードする。
+ */
+export function cardDetailUrl(cardId: string): string {
+  const id = encodeURIComponent(cardId)
+    .replace(/%2B/gi, "+")
+    .replace(/%24/gi, "$");
+  return `${BASE}/card/detail/?id=${id}`;
 }
 
 /**
  * 公式カード検索（POST）。一覧には名前がなく id だけ返る。
+ * keyword を空にすると全件一覧（samename なしで1名前1枚）になる。
  */
-export async function searchCardHits(
+export async function fetchCardListPage(
   keyword: string,
-  options?: { page?: number },
-): Promise<{ totalHint: number | null; hits: CardSearchHit[] }> {
-  const page = options?.page ?? 1;
+  page: number,
+): Promise<CardListPage> {
   const body = new URLSearchParams();
   body.set("keyword", keyword);
   body.set("pagenum", String(page));
-  body.append("keyword_type[]", "card_name");
+  if (keyword) body.append("keyword_type[]", "card_name");
   // samename は付けない（MVP: 再録を増やさない）
 
   const html = await withOfficialRateLimit(async () => {
@@ -49,32 +64,28 @@ export async function searchCardHits(
     return res.text();
   });
 
-  const $ = cheerio.load(html);
-  const totalRaw = $("#total_count").first().text().trim();
-  const totalHint = totalRaw ? Number(totalRaw) : null;
+  return parseCardListHtml(html);
+}
 
-  const ids: string[] = [];
-  $("a[data-href*='/card/detail/?id=']").each((_, el) => {
-    const href = $(el).attr("data-href") ?? "";
-    const m = href.match(/[?&]id=([^&]+)/);
-    if (m?.[1]) ids.push(m[1]);
-  });
-
-  const unique = [...new Set(ids)];
+export async function searchCardHits(
+  keyword: string,
+  options?: { page?: number },
+): Promise<{ totalHint: number | null; hits: CardSearchHit[] }> {
+  const { totalCount, cardIds } = await fetchCardListPage(
+    keyword,
+    options?.page ?? 1,
+  );
   return {
-    totalHint: Number.isFinite(totalHint) ? totalHint : null,
-    hits: unique.map((cardId) => ({ cardId, detailUrl: detailUrl(cardId) })),
+    totalHint: totalCount,
+    hits: cardIds.map((cardId) => ({ cardId, detailUrl: cardDetailUrl(cardId) })),
   };
 }
 
-/**
- * 詳細ページから正式名・能力テキストを取る。
- */
-export async function fetchCardDetail(cardId: string): Promise<OfficialCard> {
-  const cached = await readCardCache(cardId);
-  if (cached) return cached;
-
-  const url = detailUrl(cardId);
+/** 公式詳細ページを取ってパースする（キャッシュ・ミラーを見ない） */
+export async function fetchCardDetailFromOfficial(
+  cardId: string,
+): Promise<OfficialCard> {
+  const url = cardDetailUrl(cardId);
   const html = await withOfficialRateLimit(async () => {
     const res = await fetch(url, {
       headers: { "User-Agent": UA },
@@ -85,8 +96,20 @@ export async function fetchCardDetail(cardId: string): Promise<OfficialCard> {
     }
     return res.text();
   });
+  return parseCardDetailHtml(cardId, html);
+}
 
-  const card = parseCardDetailHtml(cardId, html);
+/**
+ * 詳細ページから正式名・能力テキストを取る。
+ * 実行時キャッシュ（エラッタ等で取り直した新しいもの）→ 同梱ミラー → 公式の順。
+ */
+export async function fetchCardDetail(cardId: string): Promise<OfficialCard> {
+  const cached = await readCardCache(cardId);
+  if (cached) return cached;
+  const mirrored = (await loadCardMirror())?.get(cardId);
+  if (mirrored) return mirrored;
+
+  const card = await fetchCardDetailFromOfficial(cardId);
   await writeCardCache(card);
   return card;
 }
@@ -132,20 +155,22 @@ export function parseCardDetailHtml(cardId: string, html: string): OfficialCard 
     races: splitCardField(raceText),
     abilityText,
     faces,
-    detailUrl: detailUrl(cardId),
+    detailUrl: cardDetailUrl(cardId),
     fetchedAt: new Date().toISOString(),
+    parserVersion: CARD_PARSER_VERSION,
   };
 }
 
 function extractCardFaces(
   $: CheerioAPI,
 ): Array<{ cardType: string | null; abilityText: string }> {
-  const typeHints: string[] = [];
+  // 面ごとに「カードの種類」表と特殊能力欄が1つずつ並ぶ。index で対応づけるので、
+  // 種類が読めない表や空の能力欄（バニラ面）も詰めずに残す
+  const typeHints: Array<string | null> = [];
   $("table").each((_, table) => {
     const t = $(table).text().replace(/\s+/g, " ").trim();
     if (!t.includes("カードの種類")) return;
-    const type = textBetween(t, "カードの種類", "文明");
-    if (type) typeHints.push(type);
+    typeHints.push(textBetween(t, "カードの種類", "文明"));
   });
 
   const faces: Array<{ cardType: string | null; abilityText: string }> = [];
@@ -157,7 +182,6 @@ function extractCardFaces(
       .replace(/\n{3,}/g, "\n\n")
       .replace(/\s+/g, " ")
       .trim();
-    if (!abilityText) return;
     faces.push({
       cardType: typeHints[index] ?? null,
       abilityText,
@@ -238,6 +262,19 @@ export async function resolveCardCandidates(
   options?: { maxDetails?: number },
 ): Promise<CardResolveResult> {
   const maxDetails = options?.maxDetails ?? 12;
+
+  // 全件ミラーがあれば公式へ行かずに引く。0件のときだけミラー後の新カードを疑って公式へ
+  const mirror = await loadCardMirror();
+  if (mirror) {
+    const local = searchCardNames(mirror.nameIndex, query, { limit: maxDetails });
+    const cards = local.cards
+      .map((entry) => mirror.get(entry.cardId))
+      .filter((card): card is OfficialCard => card != null);
+    if (cards.length > 0) {
+      return { query, totalHint: local.total, candidates: cards };
+    }
+  }
+
   // 中黒補完候補を取りこぼさないよう、やや多めに試す
   const variants = buildOfficialSearchVariants(query).slice(0, 12);
   const seenIds = new Set<string>();

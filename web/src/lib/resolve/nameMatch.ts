@@ -12,16 +12,29 @@ export function normalizeCardNameKey(value: string): string {
 }
 
 /**
+ * ひらがなをカタカナに寄せる（照合キー専用）。
+ * 正式名がひらがなのカードもあるので、公式へ送る検索語には使わない。
+ */
+export function foldHiraganaToKatakana(value: string): string {
+  return value.replace(/[ぁ-ゖゝゞ]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) + 0x60),
+  );
+}
+
+function matchKey(value: string): string {
+  return foldHiraganaToKatakana(normalizeCardNameKey(value));
+}
+
+/**
  * クエリが公式名（ツインパクトの片面名含む）を指すか。
+ * ひらがな／カタカナの違いは同一視する。
  */
 export function nameKeyMatches(officialName: string, query: string): boolean {
-  const q = normalizeCardNameKey(query);
+  const q = matchKey(query);
   if (q.length < 2) return false;
 
-  const faces = officialName.split(/[/／]/).map((part) =>
-    normalizeCardNameKey(part),
-  );
-  const full = normalizeCardNameKey(officialName);
+  const faces = officialName.split(/[/／]/).map((part) => matchKey(part));
+  const full = matchKey(officialName);
   return [full, ...faces].some(
     (name) => name === q || name.includes(q) || q.includes(name),
   );

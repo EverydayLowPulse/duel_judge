@@ -4,7 +4,12 @@
  * カード詳細はキャッシュヒット時はこのキューを通らない。
  * ユーザー検索は /api/cards 経由の間接アクセスなので、直列＋数百msで十分。
  */
-const MIN_INTERVAL_MS = 400;
+let minIntervalMs = 400;
+
+/** 全件ミラーなどのバッチは、ユーザー検索より間隔を広げて公式への負荷を下げる */
+export function setOfficialMinIntervalMs(ms: number): void {
+  minIntervalMs = ms;
+}
 
 let lastRequestAt = 0;
 let chain: Promise<void> = Promise.resolve();
@@ -15,7 +20,7 @@ let chain: Promise<void> = Promise.resolve();
  */
 export function withOfficialRateLimit<T>(fn: () => Promise<T>): Promise<T> {
   const run = chain.then(async () => {
-    const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastRequestAt));
+    const wait = Math.max(0, minIntervalMs - (Date.now() - lastRequestAt));
     if (wait > 0) {
       await new Promise((r) => setTimeout(r, wait));
     }
