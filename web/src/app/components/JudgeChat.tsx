@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+} from "react";
 import { fetchJudge } from "@/lib/judge/fetchJudge";
 import type { JudgeProgressEvent } from "@/lib/judge/progress";
 import type { JudgeResponse } from "@/lib/judge/types";
@@ -29,6 +35,12 @@ type ChatItem =
       steps: ThinkingStep[];
     };
 
+/** 別タブでモデルを選び直したときも追従する */
+function subscribeStoredModel(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -36,7 +48,15 @@ function newId() {
 /** 本番向けの裁定チャット（/）。ChatGPT風の1カラム会話UI。 */
 export function JudgeChat() {
   const [question, setQuestion] = useState("");
-  const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
+  // 保存済みの選択はストレージから読み、この画面で選び直した値だけを state に持つ。
+  // サーバー描画では既定モデルを出し、ハイドレーション後に保存値へ切り替わる。
+  const storedModelId = useSyncExternalStore(
+    subscribeStoredModel,
+    readStoredModelId,
+    () => DEFAULT_MODEL_ID,
+  );
+  const [chosenModelId, setModelId] = useState<string | null>(null);
+  const modelId = chosenModelId ?? storedModelId;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ChatItem[]>([]);
@@ -45,10 +65,6 @@ export function JudgeChat() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const thinkingIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setModelId(readStoredModelId());
-  }, []);
 
   // 新メッセージで下端へ
   useEffect(() => {
@@ -361,11 +377,13 @@ function ThinkingPanel({
   active: boolean;
 }) {
   const [open, setOpen] = useState(active);
+  const [prevActive, setPrevActive] = useState(active);
 
   // 判定中は開き、回答が出たら自動で閉じる（手動で開き直せる）
-  useEffect(() => {
+  if (active !== prevActive) {
+    setPrevActive(active);
     setOpen(active);
-  }, [active]);
+  }
 
   return (
     <div className="w-full max-w-[92%] rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm">
@@ -509,11 +527,17 @@ function AnswerMessage({
 }) {
   const a = result.answer;
   const [phase, setPhase] = useState(0);
+  const [prevResult, setPrevResult] = useState(result);
   const confidenceLabel =
     a.confidence === "high" ? "高" : a.confidence === "medium" ? "中" : "低";
 
-  useEffect(() => {
+  // 別の回答に差し替わったら、表示アニメーションを最初からやり直す
+  if (result !== prevResult) {
+    setPrevResult(result);
     setPhase(0);
+  }
+
+  useEffect(() => {
     const timers = [
       window.setTimeout(() => setPhase(1), 120),
       window.setTimeout(() => setPhase(2), 280),
