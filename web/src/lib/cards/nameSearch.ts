@@ -1,3 +1,4 @@
+import { dedupeAliasCandidates } from "../aliases/candidates";
 import {
   foldHiraganaToKatakana,
   normalizeCardNameKey,
@@ -214,7 +215,8 @@ export function suggestCardsFromQuestion(
       kind: "alias",
       label: hint.alias.trim(),
       key,
-      aliasCards: hint.candidates.map(
+      // 辞書に同じカードが表記違いで重複していても、候補には1枚だけ出す
+      aliasCards: dedupeAliasCandidates(hint.candidates).map(
         (c) =>
           index.byId.get(c.cardId) ?? {
             cardId: c.cardId,

@@ -1,3 +1,4 @@
+import { dedupeAliasCandidates } from "../aliases/candidates";
 import { ensureSeedAliases } from "../aliases/seed";
 import { getAliasEntry, upsertAlias } from "../aliases/store";
 import type { AliasCandidate } from "../aliases/types";
@@ -336,10 +337,3 @@ function dedupeByOfficialName(cards: OfficialCard[]): OfficialCard[] {
   return [...map.values()];
 }
 
-function dedupeAliasCandidates(list: AliasCandidate[]): AliasCandidate[] {
-  const map = new Map<string, AliasCandidate>();
-  for (const c of list) {
-    if (!map.has(c.officialName)) map.set(c.officialName, c);
-  }
-  return [...map.values()];
-}

@@ -144,6 +144,23 @@ describe("suggestCardsFromQuestion", () => {
     assert.deepEqual(ids(groups[0]!.cards), ["a1"]);
   });
 
+  it("略称辞書に同じカードが表記違いで2件あっても、候補には1枚だけ出す", () => {
+    const groups = suggestCardsFromQuestion(index, "ダーバンデで攻撃したら？", {
+      aliases: [
+        {
+          alias: "ダーバンデ",
+          candidates: [
+            { cardId: "d1", officialName: "俳句爵 Drache der'Bande" },
+            { cardId: "d1", officialName: "俳句爵 Drache der’Bande" },
+          ],
+        },
+      ],
+    });
+    assert.equal(groups.length, 1);
+    assert.deepEqual(ids(groups[0]!.cards), ["d1"]);
+    assert.equal(groups[0]?.total, 1);
+  });
+
   it("カタカナ語の途中で切れる略称一致は捨てる", () => {
     const groups = suggestCardsFromQuestion(
       index,
