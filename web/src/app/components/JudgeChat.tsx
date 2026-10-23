@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -11,7 +12,11 @@ import { fetchJudge } from "@/lib/judge/fetchJudge";
 import type { JudgeProgressEvent } from "@/lib/judge/progress";
 import type { JudgeResponse } from "@/lib/judge/types";
 import { DEFAULT_MODEL_ID } from "@/lib/llm/modelCatalog";
+import { DEMO_SCENARIO } from "@/lib/demo/scenario";
 import { CardPickerDialog, type CardPick } from "./CardPickerDialog";
+import { DemoButton } from "./DemoButton";
+import { playDemo } from "./demoPlayer";
+import { InstallButton } from "./InstallButton";
 import { ModelPicker, readStoredModelId } from "./ModelPicker";
 
 type ThinkingStep = {
@@ -62,6 +67,7 @@ export function JudgeChat() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [demoPlaying, setDemoPlaying] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const thinkingIdRef = useRef<string | null>(null);
@@ -208,10 +214,24 @@ export function JudgeChat() {
       { id: newId(), role: "user", text: `${q}\n${cardLine}` },
     ]);
     setQuestion("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
     await runJudge({ question: q, confirmedCards: picks });
+  }
+
+  /** 台本どおりに入力・カード選択・確定を人の速さで再現する。判定は本物 */
+  async function startDemo() {
+    if (loading || demoPlaying) return;
+    setDemoPlaying(true);
+    setPickerOpen(false);
+    try {
+      await playDemo(DEMO_SCENARIO, {
+        typeQuestion: setQuestion,
+        openPicker: () => openPicker(),
+      });
+    } catch {
+      // 途中で画面が閉じられたなど。利用者の操作を優先して静かに止める
+    } finally {
+      setDemoPlaying(false);
+    }
   }
 
   function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -223,21 +243,40 @@ export function JudgeChat() {
 
   function onTextareaInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setQuestion(e.target.value);
-    const el = e.target;
+  }
+
+  // 行数に合わせて入力欄を伸ばす（上限160px）。送信で空になれば1行の高さに戻る。
+  // 手入力だけでなく、デモの自動入力や、やり直しで質問文を戻したときにも効くよう中身の変化で合わせる
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }
+  }, [question]);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 text-zinc-900">
       <header className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white/90 px-4 py-3 backdrop-blur">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-[15px] font-semibold tracking-tight">
             DM_judge
           </h1>
-          <p className="text-xs text-zinc-500">デュエマのルールにくわしいAI</p>
+          <p className="truncate text-xs text-zinc-500">デュエマルール判定AI</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <InstallButton />
+          <DemoButton disabled={loading || demoPlaying} onClick={startDemo} />
         </div>
       </header>
+
+      {demoPlaying && (
+        // カード確定画面（z-50）の上にも出す
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-60 flex justify-center">
+          <p className="rounded-full bg-zinc-900/85 px-3 py-1 text-xs text-white shadow">
+            ▶ デモを再生しています
+          </p>
+        </div>
+      )}
 
       <div
         ref={scrollerRef}
@@ -295,7 +334,7 @@ export function JudgeChat() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-zinc-200/80 bg-white/95 px-3 py-3 backdrop-blur">
+      <div className="shrink-0 border-t border-zinc-200/80 bg-zinc-100/95 px-3 py-3 backdrop-blur">
         <form
           onSubmit={onSubmit}
           className="mx-auto flex w-full max-w-3xl flex-col gap-2"
@@ -334,9 +373,6 @@ export function JudgeChat() {
               </button>
             </div>
           </div>
-          <p className="px-1 text-center text-[11px] text-zinc-400">
-            Enter で次へ · Shift+Enter で改行 · 公式ソースのみ参照
-          </p>
         </form>
       </div>
 

@@ -390,6 +390,7 @@ export function CardPickerDialog({
                 disabled={submitting}
                 placeholder="カード名を検索"
                 autoComplete="off"
+                data-demo="card-search"
                 enterKeyHint="search"
                 className="w-full rounded-xl border border-zinc-300 py-2 pl-3 pr-9 text-base outline-none ring-zinc-300 focus:ring-2 disabled:opacity-60 sm:rounded-2xl sm:py-2.5"
               />
@@ -433,6 +434,7 @@ export function CardPickerDialog({
                       setConfirmGate(null);
                     }}
                     disabled={submitting}
+                    data-demo="picked-card"
                     className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-1.5 pr-2.5 text-xs text-zinc-800 transition hover:bg-zinc-200 disabled:opacity-40 sm:gap-1.5 sm:py-1 sm:pl-3 sm:pr-2 sm:text-sm"
                   >
                     {/* スマホは × 左、PCは名前→×（order で入れ替え） */}
@@ -478,6 +480,7 @@ export function CardPickerDialog({
               type="button"
               onClick={requestConfirm}
               disabled={submitting}
+              data-demo="confirm"
               className="flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition disabled:opacity-40"
             >
               {picks.length > 0
@@ -837,6 +840,8 @@ function CardOptionGrid({
               onClick={() => onToggle(option)}
               disabled={disabled}
               aria-pressed={picked}
+              // デモ再生が候補を見つけてタップするための目印
+              data-card-name={option.officialName}
               className={`flex h-full w-full flex-col gap-1.5 rounded-2xl border p-3 text-left transition disabled:opacity-50 ${
                 picked
                   ? "border-zinc-900 bg-zinc-900/5"
