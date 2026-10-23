@@ -1,5 +1,8 @@
 # デュエマルール判定 AI
 
+## デモ
+https://web-two-tau-e2mnzze5db.vercel.app/
+
 ## 概要
 
 デュエマのルール判定を代行するAIです。
