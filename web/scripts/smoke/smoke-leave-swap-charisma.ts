@@ -7,10 +7,6 @@ import type { ScenarioFacts } from "../../src/lib/judge/facts/types";
 import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 import type { ScenarioCard } from "../../src/lib/judge/scenarioCards";
 import type { OfficialCard } from "../../src/lib/official/types";
-import {
-  shouldRunDestroyManaNotSwapBlocker,
-  validateDestroyManaNotSwapBlocker,
-} from "../../src/lib/judge/validators/destroyManaNotSwapBlocker";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -104,43 +100,6 @@ const swapIssues = classifyIssues({
 assert(
   swapIssues.matches.some((m) => m.kind === "swap_effect"),
   "replace question should open swap_effect",
-);
-assert(
-  swapIssues.matches.find((m) => m.kind === "swap_effect")?.validatorId !==
-    "swap_leave_replacement",
-  "without blocksSwap, swap_leave_replacement validator must not attach",
-);
-
-const failureQ =
-  "SSS級侵略カリスマゾーンがいるとき、破壊時かわりにマナに置く効果のせいで侵略や入れ替えは失敗しますか？";
-const failureFacts: ScenarioFacts = {
-  ...facts,
-  question: failureQ,
-  leaveReplacement: buildLeaveReplacementHints({
-    question: failureQ,
-    scenarioCards,
-  }),
-};
-assert(
-  shouldRunDestroyManaNotSwapBlocker({
-    question: failureQ,
-    facts: failureFacts,
-  }),
-  "destroy_mana_not_swap_blocker should run",
-);
-assert(
-  validateDestroyManaNotSwapBlocker({
-    question: failureQ,
-    facts: failureFacts,
-    issues: {
-      matches: [],
-      qaQueries: [],
-      seedQaIds: [],
-      ruleRefs: [],
-      constraints: [],
-    },
-  }).verdict === "allowed",
-  "destroy→mana must be allowed (not a swap blocker)",
 );
 
 console.log(

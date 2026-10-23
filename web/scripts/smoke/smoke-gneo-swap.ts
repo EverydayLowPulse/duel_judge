@@ -4,7 +4,6 @@
 import { buildLeaveReplacementHints } from "../../src/lib/judge/facts/leaveReplacement";
 import { buildScenarioFacts } from "../../src/lib/judge/facts/buildScenarioFacts";
 import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
-import { runValidators } from "../../src/lib/judge/validators/runValidators";
 import type { SearchPlan } from "../../src/lib/llm/searchPlanner";
 import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
@@ -66,16 +65,11 @@ async function main() {
     entities: plan.entities,
     cardTexts: scenarioCards.map((c) => c.card.abilityText),
   });
-  const aggregate = runValidators({ question, facts, issues });
   assert(
-    aggregate.hardVerdict === "not_allowed",
-    `expected not_allowed, got ${aggregate.hardVerdict}`,
+    issues.matches.some((m) => m.kind === "swap_effect"),
+    "swap_effect issue should open",
   );
-  assert(
-    aggregate.results.some((r) => r.validatorId === "swap_leave_replacement"),
-    "missing validator",
-  );
-  console.log("OK validator", aggregate.hardVerdict);
+  console.log("OK swap issue");
 
   // 進化なし射出なら阻害しない
   const noEvoQ =

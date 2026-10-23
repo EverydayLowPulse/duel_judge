@@ -6,7 +6,6 @@ import {
   isOrderRelevant,
   matchResolutionOrderHints,
 } from "../resolutionOrder";
-import { shouldRunManaPayment } from "../validators/manaPayment";
 import type { IssueClassification, IssueMatch } from "./types";
 
 /**
@@ -46,9 +45,6 @@ export function classifyIssues(input: {
   });
   if (pending) {
     const concept = getConceptById("pending_abilities");
-    const q = normalize(input.question);
-    const sealPending =
-      q.includes(normalize("封印")) || q.includes(normalize("無視"));
     matches.push({
       kind: "pending_abilities",
       label: pending.label,
@@ -56,7 +52,6 @@ export function classifyIssues(input: {
       seedQaIds: pending.seedQaIds,
       ruleRefs: concept?.ruleRefs ?? [],
       constraints: pending.constraints,
-      validatorId: sealPending ? "seal_pending_resolve" : undefined,
     });
   }
 
@@ -89,7 +84,7 @@ export function classifyIssues(input: {
     });
   }
 
-  if (shouldRunManaPayment(input.facts)) {
+  if (shouldCheckManaPayment(input.facts)) {
     const concept = getConceptById("mana_payment");
     matches.push({
       kind: "mana_payment",
@@ -103,7 +98,6 @@ export function classifyIssues(input: {
           (f) => `[マナ支払い・禁止推論] ${f}`,
         ) ?? []),
       ],
-      validatorId: "mana_payment",
     });
   }
 
@@ -134,9 +128,6 @@ export function classifyIssues(input: {
   if (shouldCheckSwapEffect(input)) {
     const swap = getConceptById("swap_effect");
     if (swap) {
-      const leaveBlocks = (input.facts.leaveReplacement ?? []).some(
-        (h) => h.blocksSwap,
-      );
       matches.push({
         kind: "swap_effect",
         label: swap.label,
@@ -151,7 +142,6 @@ export function classifyIssues(input: {
           ...swap.invariants.map((i) => `[入れ替え] ${i}`),
           ...swap.commonFallacies.map((f) => `[入れ替え・禁止推論] ${f}`),
         ],
-        validatorId: leaveBlocks ? "swap_leave_replacement" : undefined,
       });
     }
   }
@@ -173,7 +163,6 @@ export function classifyIssues(input: {
           ...concept.invariants.map((i) => `[印刷能力] ${i}`),
           ...concept.commonFallacies.map((f) => `[印刷能力・禁止推論] ${f}`),
         ],
-        validatorId: "no_written_ability_summon",
       });
     }
   }
@@ -236,6 +225,23 @@ export function classifyIssues(input: {
     constraints: unique(matches.flatMap((m) => m.constraints)),
     orderRelevant,
   };
+}
+
+/** 召喚・唱える質問で、マナか多色カードが関わるときにマナ支払いの論点を立てる */
+function shouldCheckManaPayment(facts: ScenarioFacts): boolean {
+  const q = normalize(facts.question);
+  const asksSummon =
+    q.includes(normalize("召喚")) ||
+    q.includes(normalize("唱える")) ||
+    facts.actions.some((a) => a.kind === "summon" || a.kind === "cast");
+  const mentionsMana =
+    q.includes(normalize("マナ")) ||
+    q.includes(normalize("マナゾーン")) ||
+    facts.manaZone.length > 0;
+  const multiColorTarget =
+    (facts.paymentTarget?.civilizations.length ?? 0) >= 2 ||
+    facts.entities.some((e) => (e.card?.civilizations.length ?? 0) >= 2);
+  return asksSummon && (mentionsMana || multiColorTarget);
 }
 
 function shouldCheckDeclarationTiming(input: {

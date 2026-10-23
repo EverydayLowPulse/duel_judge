@@ -9,7 +9,6 @@ export type RuleConcept = {
   ruleRefs: string[];
   qaSeeds: string[];
   requiredFacts: string[];
-  validatorId?: string;
   invariants: string[];
   commonFallacies: string[];
 };
@@ -19,5 +18,4 @@ export type ResolvedConcepts = {
   ruleRefs: string[];
   qaSeeds: string[];
   constraints: string[];
-  validatorIds: string[];
 };

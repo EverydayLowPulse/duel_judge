@@ -5,8 +5,6 @@ import { buildEnrichedScenarioFacts } from "../../src/lib/judge/facts/enrichMana
 import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
 import { runJudge } from "../../src/lib/judge/runJudge";
 import { resolveScenarioCards } from "../../src/lib/judge/scenarioCards";
-import { checkManaPayment } from "../../src/lib/judge/validators/manaPayment";
-import { runValidators } from "../../src/lib/judge/validators/runValidators";
 import { planSearchWithGemini } from "../../src/lib/llm/searchPlanner";
 import { resolveCardName } from "../../src/lib/resolve/resolveCardName";
 
@@ -58,26 +56,11 @@ async function main() {
     throw new Error("failed to structure mana payment facts");
   }
 
-  const check = checkManaPayment({
-    cost: facts.paymentTarget.cost,
-    requiredCivilizations: facts.paymentTarget.civilizations,
-    manaZone: facts.manaZone.map((m) => ({
-      civilizations: m.civilizations,
-      manaValue: m.manaValue,
-    })),
-  });
-  if (check.canPay) {
-    throw new Error(`deterministic check should fail: ${check.reason}`);
-  }
-
   const issues = classifyIssues({ question, facts });
-  const aggregate = runValidators({ question, facts, issues });
-  if (aggregate.hardVerdict !== "not_allowed") {
-    throw new Error(
-      `expected hardVerdict not_allowed, got ${aggregate.hardVerdict}`,
-    );
+  if (!issues.matches.some((m) => m.kind === "mana_payment")) {
+    throw new Error("expected mana_payment issue");
   }
-  console.log("validator OK", aggregate.results[0]?.reason);
+  console.log("issue OK", issues.ruleRefs);
 
   const result = await runJudge({
     question,

@@ -3,10 +3,6 @@
  */
 import type { ScenarioFacts } from "../../src/lib/judge/facts/types";
 import { classifyIssues } from "../../src/lib/judge/issues/classifyIssues";
-import {
-  shouldRunReplacementBreakHand,
-  validateReplacementBreakHand,
-} from "../../src/lib/judge/validators/replacementBreakHand";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -49,18 +45,6 @@ assert(
   issues.constraints.some((c) => /句点|101\.5a/.test(c)),
   "generic period-scope (101.5a) should be injected",
 );
-
-assert(
-  shouldRunReplacementBreakHand({ question, issues }),
-  "replacement_break_hand should run for 置換ブレイク×行き先",
-);
-const verdict = validateReplacementBreakHand({
-  question,
-  facts,
-  issues,
-});
-assert(verdict.verdict === "allowed", `expected allowed, got ${verdict.verdict}`);
-assert(/手札/.test(verdict.reason), "reason should mention 手札");
 
 // 「かわりに」があれば置換論点（カード文のみでも可）。ケース特化の検出はしない。
 const zRushQuestion =

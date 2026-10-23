@@ -18,7 +18,6 @@ export const RULE_CONCEPTS: RuleConcept[] = [
       "manaZone[].civilizations",
       "manaZone[].manaValue",
     ],
-    validatorId: "mana_payment",
     invariants: [
       "タップしたカードは持つ文明のうち1つだけのマナになる（107.2 / 112.2a）。",
       "多色カード1枚をタップしても、そのカードが持つ全文明を同時に満たしたことにはならない。",
@@ -169,7 +168,6 @@ export const RULE_CONCEPTS: RuleConcept[] = [
     // 39567 スター / 39685 EXライフ / 39038 Gリンク / 48908 場の置換 / パワー条件
     qaSeeds: ["39567", "39685", "39038", "48908", "48946", "48947"],
     requiredFacts: ["actions", "entities"],
-    validatorId: "swap_leave_replacement",
     invariants: [
       "入れ替えはカード移動が正常にできないと失敗する（進化専用ではない）。",
       "革命チェンジのパワー条件は攻撃を開始した時点のパワーで判定する。",
@@ -293,7 +291,6 @@ export const RULE_CONCEPTS: RuleConcept[] = [
     ruleRefs: ["205.2", "205.2a", "205.2b"],
     qaSeeds: [],
     requiredFacts: ["writtenAbilities"],
-    validatorId: "no_written_ability_summon",
     invariants: [
       "注釈文はカッコでくくられたルール要約であり、能力ではない（205.2a）。",
       "注釈文だけが書かれたクリーチャーは「カードに能力が書かれていない」扱いになる。",
